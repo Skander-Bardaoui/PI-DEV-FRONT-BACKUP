@@ -3,6 +3,9 @@ import { FileText, ShoppingCart, Truck, Receipt, TrendingUp, DollarSign, Loader2
 import { useQuery } from '@tanstack/react-query';
 import axiosInstance from '../../../api/axiosInstance';
 import { AiForecastPanel } from '../../../components/sales/AiForecastPanel';
+import { SalesForecastWidget } from '../../../components/sales/SalesForecastWidget';
+import { HighRiskClientsWidget } from '../../../components/sales/HighRiskClientsWidget';
+import { useAIAccess } from '../../../hooks/useAIAccess';
 
 interface DashboardStats {
   pendingQuotes: number;
@@ -24,6 +27,7 @@ interface DashboardStats {
 export default function SalesDashboardPage() {
   const { user } = useAuth();
   const businessId = (user as any)?.business_id ?? '';
+  const { hasAIAccess, loading: aiLoading } = useAIAccess();
 
   const { data: stats, isLoading, error } = useQuery({
     queryKey: ['sales-dashboard', businessId],
@@ -89,89 +93,37 @@ export default function SalesDashboardPage() {
         <p className="text-gray-600">Vue d'ensemble de vos ventes</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        {statCards.map((stat, index) => (
-          <div key={index} className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className={`${stat.color} p-3 rounded-lg`}>
-                <stat.icon className="h-6 w-6 text-white" />
-              </div>
-            </div>
-            <h3 className="text-gray-600 text-sm mb-1">{stat.title}</h3>
-            <p className="text-2xl font-bold">{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Chiffre d'affaires mensuel
-          </h2>
-          <div className="h-64 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-4xl font-bold text-blue-600">
-                {stats?.monthlyRevenue?.toFixed(3) ?? '0.000'} DT
-              </p>
-              <p className="text-gray-500 mt-2">Ce mois-ci</p>
-            </div>
-          </div>
+      {/* ML Widgets - Sales Forecast & High Risk Clients - Only for Premium users */}
+      {!aiLoading && hasAIAccess && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <SalesForecastWidget businessId={businessId} forecastDays={30} />
+          <HighRiskClientsWidget businessId={businessId} />
         </div>
+      )}
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <DollarSign className="h-5 w-5" />
-            Top clients
-          </h2>
-          <div className="space-y-3">
-            {stats?.topClients && stats.topClients.length > 0 ? (
-              stats.topClients.map((client, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="font-medium">{client.name}</span>
-                  <span className="text-blue-600 font-semibold">{client.total.toFixed(3)} DT</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-gray-400 py-8">
-                Aucune donnée disponible
-              </div>
-            )}
-          </div>
+      {/* Dashboard Power BI (grand) */}
+      <div className="mb-6 bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-purple-600" />
+          Dashboard Power BI
+        </h2>
+        <div className="relative w-full" style={{ paddingBottom: '60%' }}>
+          <iframe
+            title="PISAAS Dashboard"
+            src="https://app.powerbi.com/reportEmbed?reportId=aa84f5ff-5e48-4237-8442-25926ba4d04e&autoAuth=true&ctid=604f1a96-cbe8-43f8-abbf-f8eaf5d85730"
+            frameBorder="0"
+            allowFullScreen={true}
+            className="absolute top-0 left-0 w-full h-full rounded-lg border border-gray-200"
+          />
         </div>
       </div>
 
-      {/* Section avec Activité récente et Prévisions IA */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-6">
-        {/* Activité récente - 2 colonnes sur grand écran */}
-        <div className="xl:col-span-2 bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">Activité récente</h2>
-          <div className="space-y-3">
-            {stats?.recentActivity && stats.recentActivity.length > 0 ? (
-              stats.recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-start gap-3 p-3 border-l-4 border-blue-500 bg-gray-50 rounded">
-                  <div className="flex-1">
-                    <p className="font-medium">{activity.type}</p>
-                    <p className="text-sm text-gray-600">{activity.description}</p>
-                  </div>
-                  <span className="text-xs text-gray-500">
-                    {new Date(activity.date).toLocaleDateString('fr-FR')}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-gray-400 py-8">
-                Aucune activité récente
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Prévisions IA - 1 colonne sur grand écran */}
+      {/* Prévisions IA - Only for Premium users */}
+      {!aiLoading && hasAIAccess && (
         <div>
           <AiForecastPanel businessId={businessId} />
         </div>
-      </div>
+      )}
     </div>
   );
 }

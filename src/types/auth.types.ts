@@ -27,6 +27,13 @@ export interface User {
   timezone?: string;
   created_at: string;
   updated_at: string;
+  // AI Access Info
+  hasAIAccess?: boolean;
+  plan?: {
+    name: string;
+    slug: string;
+    ai_enabled: boolean;
+  };
 }
 
 // ─── API Request Payloads ────────────────────────────────────────────────
@@ -71,6 +78,10 @@ export interface RegisterRequest {
     rate: number;
     is_default: boolean;
   };
+
+  // Plan Selection
+  planId: string;
+  billingCycle: 'monthly' | 'annual';
 }
 export interface RefreshTokenRequest {
   refresh_token: string;
@@ -88,11 +99,11 @@ export interface AuthResponse {
   refresh_token: string;
 }
 
-export interface LoginResponse extends AuthResponse {}
+export type LoginResponse = AuthResponse;
 
-export interface RegisterResponse extends AuthResponse {}
+export type RegisterResponse = AuthResponse;
 
-export interface RefreshResponse extends AuthResponse {}
+export type RefreshResponse = AuthResponse;
 
 // ─── Auth Context State ──────────────────────────────────────────────────
 export interface AuthContextType {

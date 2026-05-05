@@ -24,12 +24,17 @@ export default {
     goodsReceipts:    'Réceptions',
     supplierInvoices: 'Factures fournisseurs',
     supplierPayments: 'Paiements fournisseurs',
-    supplierIntelligence:  'Intelligence Fournisseurs',
+    supplierIntelligence:  'Performance Fournisseurs',
     // Stock
     overview:    "Vue d'ensemble",
     products:    'Produits',
-    categories:  'Catégories',
+    // ==================== Alaa change for service type ====================
+    services:    'Services',
+    serviceCategories: 'Catégories de services',
+    productCategories: 'Catégories de produits',
+    // ====================================================================
     movements:   'Mouvements',
+    warehouses:  'Entrepôts',
   },
 
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -329,11 +334,11 @@ export default {
     extraLarge:     'Très grand',
   },
 
-  // ── Rapprochement 3 voies ──────────────────────────────────────────────────
+  // ── Contrôle Factures ──────────────────────────────────────────────────
   matching: {
-    title:        'Rapprochement 3 voies',
+    title:        'Contrôle Factures',
     subtitle:     'BC ↔ Bon de réception ↔ Facture',
-    matched:      'Rapprochement validé',
+    matched:      'Contrôle validé',
     partial:      'Rapprochement partiel',
     mismatch:     'Écarts significatifs détectés',
     missingPo:    'Bon de commande manquant',

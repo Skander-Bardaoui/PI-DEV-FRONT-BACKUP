@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import {
   Plus,
   Search,
@@ -20,20 +22,110 @@ import {
   Loader2,
   Trash2,
   Edit,
+  Sparkles,
+  Check,
+  X,
+  BarChart2,
 } from 'lucide-react';
+import { taskSchema, type TaskFormData } from '../../schemas/task.schema';
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCorners,
+} from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import TaskChat from '../../components/TaskChat';
+import DroppableColumn from '../../components/DroppableColumn';
+import DraggableTaskCard from '../../components/DraggableTaskCard';
+import SubtaskList from '../../components/SubtaskList';
+import SubtaskViewModal from '../../components/SubtaskViewModal';
+import DailyCheckinBanner from '../../components/DailyCheckinBanner';
+import TodayCheckinsSection from '../../components/TodayCheckinsSection';
+import { PresenceIndicator } from '../../components/PresenceIndicator';
+import { usePresenceContext } from '../../context/PresenceContext';
+import { toast } from 'sonner';
+import { io, Socket } from 'socket.io-client';
+import { activitiesApi, Activity } from '../../api/activities.api';
+import StatisticsDashboard from '../../components/StatisticsDashboard';
+import { PermissionManagementModal } from '../../components/PermissionManagementModal';
+import { TeamMemberRowSkeleton, TaskCardSkeleton, ActivityItemSkeleton } from '../../components/collaboration/CollaborationSkeletonLoaders';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface TeamMember {
+  [x: string]: any;
   id: string;
   user_id: string;
   business_id: string;
   role: string;
+  permissions: string;
   is_active: boolean;
   invited_at: string | null;
   joined_at: string | null;
   created_at: string;
+  updated_at: string;
+  collaboration_permissions?: {
+    create_task?: boolean;
+    update_task?: boolean;
+    delete_task?: boolean;
+    create_subtask?: boolean;
+    update_subtask?: boolean;
+    delete_subtask?: boolean;
+    mark_complete_subtask?: boolean;
+    assign_task?: boolean;
+    view_all_tasks?: boolean;
+    add_member?: boolean;
+    kick_member?: boolean;
+    promote_member?: boolean;
+  };
+  stock_permissions?: {
+    create_product?: boolean;
+    update_product?: boolean;
+    delete_product?: boolean;
+    create_movement?: boolean;
+    delete_movement?: boolean;
+    create_category?: boolean;
+    update_category?: boolean;
+    delete_category?: boolean;
+    create_warehouse?: boolean;
+    update_warehouse?: boolean;
+    delete_warehouse?: boolean;
+    create_reservation?: boolean;
+    delete_reservation?: boolean;
+    create_service?: boolean;
+    update_service?: boolean;
+    delete_service?: boolean;
+    create_service_category?: boolean;
+    update_service_category?: boolean;
+    delete_service_category?: boolean;
+  };
+  payment_permissions?: {
+    create_client_payment?: boolean;
+    delete_client_payment?: boolean;
+    create_supplier_payment?: boolean;
+    delete_supplier_payment?: boolean;
+    create_schedule?: boolean;
+    update_schedule?: boolean;
+    delete_schedule?: boolean;
+    pay_installment?: boolean;
+    create_account?: boolean;
+    update_account?: boolean;
+    delete_account?: boolean;
+    create_transfer?: boolean;
+    delete_transfer?: boolean;
+  };
+  salary_permissions?: {
+    create_salary?: boolean;
+    update_salary?: boolean;
+    delete_salary?: boolean;
+    view_salary?: boolean;
+  };
   user: {
     id: string;
     firstName?: string;
@@ -70,29 +162,6 @@ interface User {
   lastName?: string;
   role: string;
 }
-
-// ─── Mock data for activity ───────────────────────────────────────────────────
-
-const activityData = [
-  { id: 1, user: 'Ahmed Ben Ali', action: 'created task', target: 'Design new landing page', time: '2 hours ago', icon: Plus, color: 'text-indigo-600' },
-  { id: 2, user: 'Salma Mansouri', action: 'completed task', target: 'Update user profile UI', time: '4 hours ago', icon: CheckCircle2, color: 'text-green-600' },
-  { id: 3, user: 'Mohamed Trabelsi', action: 'commented on', target: 'Fix authentication bug', time: '5 hours ago', icon: MessageSquare, color: 'text-blue-600' },
-  { id: 4, user: 'Fatma Khelifi', action: 'started working on', target: 'Implement payment gateway', time: '6 hours ago', icon: Clock, color: 'text-yellow-600' },
-  { id: 5, user: 'Karim Bouazizi', action: 'uploaded file to', target: 'Test documentation', time: '1 day ago', icon: FileText, color: 'text-purple-600' },
-  { id: 6, user: 'Nadia Hamdi', action: 'completed task', target: 'Deploy to production', time: '1 day ago', icon: CheckCircle2, color: 'text-green-600' },
-  { id: 7, user: 'Ahmed Ben Ali', action: 'blocked task', target: 'Database migration', time: '2 days ago', icon: XCircle, color: 'text-red-600' },
-];
-
-// ─── Mock data for notifications ──────────────────────────────────────────────
-
-const initialNotifications = [
-  { id: 1, title: 'New task assigned', message: 'Ahmed assigned you to "Design new landing page"', time: '10 min ago', read: false },
-  { id: 2, title: 'Task completed', message: 'Salma completed "Update user profile UI"', time: '1 hour ago', read: false },
-  { id: 3, title: 'Comment added', message: 'Mohamed commented on your task', time: '2 hours ago', read: false },
-  { id: 4, title: 'Deadline approaching', message: 'Task "Fix authentication bug" is due tomorrow', time: '3 hours ago', read: true },
-  { id: 5, title: 'Team member joined', message: 'Nadia Hamdi joined the team', time: '1 day ago', read: true },
-  { id: 6, title: 'Task blocked', message: 'Database migration is blocked', time: '2 days ago', read: true },
-];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -148,9 +217,23 @@ function formatRole(role: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function formatTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  if (diffDays < 30) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  return date.toLocaleDateString();
+}
+
 // ─── API calls ────────────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const API_BASE = import.meta.env.VITE_API_URL ?? 'https://pi-dev-backend.onrender.com';
 
 async function fetchMyBusinesses(): Promise<Business[]> {
   const res = await fetch(`${API_BASE}/businesses/my`, {
@@ -229,22 +312,40 @@ async function fetchCurrentUser(): Promise<User> {
   return res.json();
 }
 
+async function fetchActivities(businessId: string): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/activities/business/${businessId}`, {
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('Failed to fetch activities');
+  return res.json();
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Collaboration() {
   const [activeTab, setActiveTab] = useState('tasks');
-  const [notifications, setNotifications] = useState(initialNotifications);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showInviteMember, setShowInviteMember] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [viewingTask, setViewingTask] = useState<Task | null>(null); // Pour TEAM_MEMBER
+  const [selectedMemberForPermissions, setSelectedMemberForPermissions] = useState<TeamMember | null>(null);
 
   // Team state
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [currentBusiness, setCurrentBusiness] = useState<Business | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(true);
   const [membersError, setMembersError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Infinite scroll state for team members
+  const [displayedMembersCount, setDisplayedMembersCount] = useState(10);
+  const membersObserverTarget = useRef<HTMLDivElement>(null);
+
+  // Infinite scroll state for activities
+  const [displayedActivitiesCount, setDisplayedActivitiesCount] = useState(20);
+  const activitiesObserverTarget = useRef<HTMLDivElement>(null);
 
   // Tasks state
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -257,17 +358,127 @@ export default function Collaboration() {
   // Chat state
   const [chatTask, setChatTask] = useState<Task | null>(null);
 
-  // New task form state
-  const [newTaskForm, setNewTaskForm] = useState({
-    title: '',
-    description: '',
-    priority: 'MEDIUM' as Task['priority'],
-    assignedToIds: [] as string[],
-    dueDate: '',
+  // Drag and drop state
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
+
+  // Sensors for drag and drop
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  // React Hook Form with Zod validation
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting, touchedFields },
+    reset,
+    setValue,
+    watch,
+    setError,
+  } = useForm<TaskFormData>({
+    resolver: zodResolver(taskSchema),
+    mode: 'onBlur',
+    defaultValues: {
+      title: '',
+      description: '',
+      priority: 'MEDIUM',
+      status: 'TODO',
+      dueDate: '',
+      assignedToIds: [],
+    },
   });
 
-  // Check if user can manage tasks
-  const canManageTasks = currentUser?.role === 'BUSINESS_OWNER' || currentUser?.role === 'BUSINESS_ADMIN';
+  // Watch form values for character counter and AI features
+  const watchedDescription = watch('description');
+  const watchedTitle = watch('title');
+  const watchedPriority = watch('priority');
+  const watchedAssignedToIds = watch('assignedToIds');
+
+  // AI Priority Detection state
+  const [aiSuggestedPriority, setAiSuggestedPriority] = useState<Task['priority'] | null>(null);
+  const [detectingPriority, setDetectingPriority] = useState(false);
+
+  // AI Description Improvement state
+  const [improvingDescription, setImprovingDescription] = useState(false);
+  const [aiImprovedDescription, setAiImprovedDescription] = useState<string | null>(null);
+
+  // Activities state
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [activitiesError, setActivitiesError] = useState<string | null>(null);
+
+  // Daily check-in state
+  const [refreshCheckins, setRefreshCheckins] = useState(0);
+
+  // Real-time presence from global context
+  const { userStatuses, isConnected: presenceConnected } = usePresenceContext();
+
+  // Get current user's member record to check permissions
+  const currentMember = teamMembers.find(m => m.user_id === currentUser?.id);
+  
+  // Only BUSINESS_OWNER bypasses permission checks
+  // BUSINESS_ADMIN must be checked against their permissions like everyone else
+  const isOwner = currentUser?.role === 'BUSINESS_OWNER';
+  const currentUserRole = currentUser?.role;
+  
+  // Check specific permissions for current user using direct boolean checks
+  const collab = currentMember?.collaboration_permissions;
+  const canCreateTasks = isOwner || collab?.create_task === true;
+  const canUpdateTasks = isOwner || collab?.update_task === true;
+  const canDeleteTasks = isOwner || collab?.delete_task === true;
+  
+  // For managing team permissions - only OWNER and ADMIN can access the permission management UI
+  const canManagePermissions = currentUser?.role === 'BUSINESS_OWNER' || currentUser?.role === 'BUSINESS_ADMIN';
+
+  // Check if current user can manage a specific member's permissions
+  const canManageMemberPermissions = (member: TeamMember): boolean => {
+    const currentUserRole = currentUser?.role;
+    const targetRole = member.role;
+
+    // Cannot manage own permissions
+    if (member.user_id === currentUser?.id) {
+      return false;
+    }
+
+    // BUSINESS_OWNER can manage everyone except themselves
+    if (currentUserRole === 'BUSINESS_OWNER') {
+      return targetRole !== 'BUSINESS_OWNER' || member.user_id !== currentUser?.id;
+    }
+
+    // BUSINESS_ADMIN can only manage TEAM_MEMBER and ACCOUNTANT
+    if (currentUserRole === 'BUSINESS_ADMIN') {
+      return targetRole === 'TEAM_MEMBER' || targetRole === 'ACCOUNTANT';
+    }
+
+    // Other roles cannot manage permissions
+    return false;
+  };
+
+  // Filter tasks assigned to current user
+  const myAssignedTasks = tasks.filter(
+    (task) => task.assignedTo?.some((u) => u.id === currentUser?.id)
+  );
+
+  // ── Function to reload members ────────────────────────────────────────────
+  const loadMembers = async () => {
+    if (!currentBusiness) return;
+    
+    setLoadingMembers(true);
+    setMembersError(null);
+    try {
+      const members = await fetchBusinessMembers(currentBusiness.id);
+      setTeamMembers(members);
+    } catch (err: any) {
+      setMembersError(err.message ?? 'Erreur lors du chargement des membres.');
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
 
   // ── Load current user, businesses, members, and tasks on mount ─────────────
   useEffect(() => {
@@ -313,6 +524,106 @@ export default function Collaboration() {
     loadData();
   }, []);
 
+  // Show skeleton for minimum 2 seconds
+  useEffect(() => {
+    if (loadingMembers || loadingTasks) {
+      setShowSkeleton(true);
+    } else {
+      const timer = setTimeout(() => {
+        setShowSkeleton(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [loadingMembers, loadingTasks]);
+
+  // ── Redirect to tasks tab if user doesn't have permission for current tab ──
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // If user is TEAM_MEMBER or ACCOUNTANT and trying to access activity or statistics
+    if (
+      (currentUser.role === 'TEAM_MEMBER' || currentUser.role === 'ACCOUNTANT') &&
+      (activeTab === 'activity' || activeTab === 'statistics')
+    ) {
+      setActiveTab('tasks');
+    }
+  }, [currentUser, activeTab]);
+
+  // ── WebSocket connection for real-time updates ────────────────────────────
+  useEffect(() => {
+    if (!currentBusiness) return;
+
+    const newSocket = io(`${API_BASE}/messages`, {
+      withCredentials: true,
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+      timeout: 20000,
+    });
+
+    newSocket.on('connect', () => {
+      console.log('WebSocket connected');
+      if (newSocket && newSocket.connected) {
+        newSocket.emit('joinBusiness', currentBusiness.id);
+      }
+    });
+
+    newSocket.on('taskMoved', (data: {
+      taskId: string;
+      newStatus: string;
+      newOrder: number;
+      movedBy: string;
+    }) => {
+      // Update task in local state if moved by another user
+      if (data.movedBy !== currentUser?.id) {
+        setTasks((prevTasks) => {
+          const taskIndex = prevTasks.findIndex((t) => t.id === data.taskId);
+          if (taskIndex === -1) return prevTasks;
+
+          const updatedTasks = [...prevTasks];
+          updatedTasks[taskIndex] = {
+            ...updatedTasks[taskIndex],
+            status: data.newStatus as Task['status'],
+          };
+
+          return updatedTasks;
+        });
+      }
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.emit('leaveBusiness', currentBusiness.id);
+      newSocket.disconnect();
+    };
+  }, [currentBusiness, currentUser]);
+
+  // ── Load activities when business changes or tab switches to 'activity' ────
+  useEffect(() => {
+    if (!currentBusiness || activeTab !== 'activity') return;
+
+    async function loadActivities() {
+      console.log('🔄 Loading activities for business:', currentBusiness.id);
+      setLoadingActivities(true);
+      setActivitiesError(null);
+      try {
+        const fetchedActivities = await activitiesApi.getByBusiness(currentBusiness.id);
+        console.log('✅ Received activities:', fetchedActivities.length, fetchedActivities);
+        setActivities(fetchedActivities);
+      } catch (err: any) {
+        console.error('❌ Failed to load activities:', err);
+        setActivitiesError(err.message ?? 'Failed to load activities');
+      } finally {
+        setLoadingActivities(false);
+      }
+    }
+
+    loadActivities();
+  }, [currentBusiness, activeTab]);
+
   // ── Filtered members by search ────────────────────────────────────────────
   const filteredMembers = teamMembers.filter((m) => {
     const name = getMemberName(m).toLowerCase();
@@ -322,6 +633,62 @@ export default function Collaboration() {
     return name.includes(q) || email.includes(q) || role.includes(q);
   });
 
+  const displayedMembers = filteredMembers.slice(0, displayedMembersCount);
+  const hasMoreMembers = displayedMembersCount < filteredMembers.length;
+
+  const displayedActivities = activities.slice(0, displayedActivitiesCount);
+  const hasMoreActivities = displayedActivitiesCount < activities.length;
+
+  const isDisplayLoading = loadingMembers || loadingTasks || showSkeleton;
+
+  // Infinite scroll observer for team members
+  useEffect(() => {
+    if (activeTab !== 'team') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && displayedMembersCount < filteredMembers.length) {
+          setDisplayedMembersCount((prev) => Math.min(prev + 10, filteredMembers.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (membersObserverTarget.current) {
+      observer.observe(membersObserverTarget.current);
+    }
+
+    return () => {
+      if (membersObserverTarget.current) {
+        observer.unobserve(membersObserverTarget.current);
+      }
+    };
+  }, [activeTab, displayedMembersCount, filteredMembers.length]);
+
+  // Infinite scroll observer for activities
+  useEffect(() => {
+    if (activeTab !== 'activity') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && displayedActivitiesCount < activities.length) {
+          setDisplayedActivitiesCount((prev) => Math.min(prev + 20, activities.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (activitiesObserverTarget.current) {
+      observer.observe(activitiesObserverTarget.current);
+    }
+
+    return () => {
+      if (activitiesObserverTarget.current) {
+        observer.unobserve(activitiesObserverTarget.current);
+      }
+    };
+  }, [activeTab, displayedActivitiesCount, activities.length]);
+
   // ── Tasks by status ────────────────────────────────────────────────────────
   const tasksByStatus = {
     TODO: tasks.filter((t) => t.status === 'TODO'),
@@ -330,53 +697,49 @@ export default function Collaboration() {
     BLOCKED: tasks.filter((t) => t.status === 'BLOCKED'),
   };
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
-  const markAsRead = (id: number) => {
-    setNotifications(notifications.map((n) => (n.id === id ? { ...n, read: true } : n)));
-  };
-
-  const markAllAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, read: true })));
-  };
-
   // ── Handle create task ─────────────────────────────────────────────────────
-  const handleCreateTask = async () => {
-    if (!newTaskForm.title.trim()) {
-      alert('Please enter a task title');
-      return;
-    }
+  const onSubmitTask = async (data: TaskFormData) => {
     if (!currentBusiness) {
-      alert('No business selected');
+      toast.error('No business selected');
       return;
     }
 
     try {
-      const assignedUsers = newTaskForm.assignedToIds
+      const assignedUsers = (data.assignedToIds || [])
         .map(id => teamMembers.find(m => m.user_id === id)?.user)
         .filter(Boolean) as User[];
 
       const taskData: Partial<Task> = {
-        title: newTaskForm.title,
-        description: newTaskForm.description || undefined,
-        priority: newTaskForm.priority,
+        title: data.title,
+        description: data.description || undefined,
+        priority: data.priority,
         assignedTo: assignedUsers,
-        dueDate: newTaskForm.dueDate || undefined,
-        status: 'TODO',
+        dueDate: data.dueDate || undefined,
+        status: editingTask ? editingTask.status : 'TODO',
         businessId: currentBusiness.id,
       };
-      const created = await createTask(taskData);
-      setTasks([...tasks, created]);
+
+      if (editingTask) {
+        // Update existing task
+        const updated = await updateTask(editingTask.id, taskData);
+        setTasks(tasks.map((t) => (t.id === editingTask.id ? updated : t)));
+        toast.success('Task updated successfully');
+      } else {
+        // Create new task
+        const created = await createTask(taskData);
+        setTasks([...tasks, created]);
+        toast.success('Task created successfully');
+      }
+
+      // Reset form and close modal
+      reset();
       setShowNewTask(false);
-      setNewTaskForm({
-        title: '',
-        description: '',
-        priority: 'MEDIUM',
-        assignedToIds: [],
-        dueDate: '',
-      });
+      setEditingTask(null);
+      setAiSuggestedPriority(null);
+      setAiImprovedDescription(null);
     } catch (err: any) {
-      alert(err.message ?? 'Failed to create task');
+      // Keep form values on error
+      toast.error(err.message ?? 'Failed to save task');
     }
   };
 
@@ -403,11 +766,34 @@ export default function Collaboration() {
 
   // ── Handle edit task ───────────────────────────────────────────────────────
   const handleEditTask = (task: Task) => {
+    console.log('🔍 DEBUG handleEditTask:', {
+      taskId: task.id,
+      taskTitle: task.title,
+      userRole: currentUser?.role,
+      isTeamMember: currentUser?.role === 'TEAM_MEMBER',
+      isAccountant: currentUser?.role === 'ACCOUNTANT',
+      willOpenViewModal: currentUser?.role === 'TEAM_MEMBER' || currentUser?.role === 'ACCOUNTANT',
+      currentBusiness: currentBusiness?.id,
+      currentBusinessExists: !!currentBusiness
+    });
+
+    // Si TEAM_MEMBER, ouvrir le modal de vue des subtasks
+    if (currentUser?.role === 'TEAM_MEMBER' || currentUser?.role === 'ACCOUNTANT') {
+      console.log('✅ Opening SubtaskViewModal for TEAM_MEMBER/ACCOUNTANT');
+      console.log('📋 Setting viewingTask to:', task);
+      setViewingTask(task);
+      console.log('✅ viewingTask state updated');
+      return;
+    }
+
+    console.log('✅ Opening edit modal for OWNER/ADMIN');
+    // Sinon, ouvrir le modal d'édition complet
     setEditingTask(task);
-    setNewTaskForm({
+    reset({
       title: task.title,
       description: task.description || '',
       priority: task.priority,
+      status: task.status,
       assignedToIds: task.assignedTo?.map(u => u.id) || [],
       dueDate: task.dueDate || '',
     });
@@ -415,62 +801,128 @@ export default function Collaboration() {
   };
 
   // ── Handle update task ─────────────────────────────────────────────────────
-  const handleUpdateTask = async () => {
-    if (!editingTask) return;
-    if (!newTaskForm.title.trim()) {
-      alert('Please enter a task title');
-      return;
-    }
-
-    try {
-      const assignedUsers = newTaskForm.assignedToIds
-        .map(id => teamMembers.find(m => m.user_id === id)?.user)
-        .filter(Boolean) as User[];
-
-      const updates: Partial<Task> = {
-        title: newTaskForm.title,
-        description: newTaskForm.description || undefined,
-        priority: newTaskForm.priority,
-        assignedTo: assignedUsers,
-        dueDate: newTaskForm.dueDate || undefined,
-      };
-      const updated = await updateTask(editingTask.id, updates);
-      setTasks(tasks.map((t) => (t.id === editingTask.id ? updated : t)));
-      setShowNewTask(false);
-      setEditingTask(null);
-      setNewTaskForm({
-        title: '',
-        description: '',
-        priority: 'MEDIUM',
-        assignedToIds: [],
-        dueDate: '',
-      });
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to update task');
-    }
-  };
+  // Removed - now handled by onSubmitTask
 
   // ── Close modal ────────────────────────────────────────────────────────────
   const handleCloseTaskModal = () => {
     setShowNewTask(false);
     setEditingTask(null);
-    setNewTaskForm({
-      title: '',
-      description: '',
-      priority: 'MEDIUM',
-      assignedToIds: [],
-      dueDate: '',
-    });
+    setAiSuggestedPriority(null);
+    setDetectingPriority(false);
+    setImprovingDescription(false);
+    setAiImprovedDescription(null);
+    reset();
   };
 
   // ── Toggle assigned member ─────────────────────────────────────────────────
   const toggleAssignedMember = (userId: string) => {
-    setNewTaskForm(prev => ({
-      ...prev,
-      assignedToIds: prev.assignedToIds.includes(userId)
-        ? prev.assignedToIds.filter(id => id !== userId)
-        : [...prev.assignedToIds, userId],
-    }));
+    const currentIds = watchedAssignedToIds || [];
+    const newIds = currentIds.includes(userId)
+      ? currentIds.filter(id => id !== userId)
+      : [...currentIds, userId];
+    setValue('assignedToIds', newIds, { shouldValidate: true });
+  };
+
+  // ── Detect priority with AI ────────────────────────────────────────────────
+  const handleDetectPriority = async () => {
+    // Ne pas détecter si on édite une tâche existante
+    if (editingTask) {
+      console.log('⏭️  Skipping AI detection - editing existing task');
+      return;
+    }
+
+    const description = (watchedDescription || '').trim();
+    const title = (watchedTitle || '').trim();
+
+    console.log('🔍 handleDetectPriority called');
+    console.log('Title:', title);
+    console.log('Description:', description);
+    console.log('Description length:', description.length);
+
+    // Only trigger if description has more than 10 characters
+    if (description.length <= 10 || !title) {
+      console.log('❌ Skipping AI detection - conditions not met');
+      console.log('- Description length > 10:', description.length > 10);
+      console.log('- Title exists:', !!title);
+      return;
+    }
+
+    console.log('✅ Calling AI detection API...');
+    setDetectingPriority(true);
+    try {
+      const response = await fetch(`${API_BASE}/tasks/detect-priority`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ title, description }),
+      });
+
+      console.log('📡 API Response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ AI detected priority:', data.priority);
+        setAiSuggestedPriority(data.priority);
+        setValue('priority', data.priority, { shouldValidate: true });
+      } else {
+        const errorText = await response.text();
+        console.error('❌ API Error:', errorText);
+      }
+    } catch (error) {
+      // Silently ignore errors
+      console.error('❌ Failed to detect priority:', error);
+    } finally {
+      setDetectingPriority(false);
+      console.log('🏁 Detection finished');
+    }
+  };
+
+  // ── Improve description with AI ────────────────────────────────────────────
+  const handleImproveDescription = async () => {
+    const description = (watchedDescription || '').trim();
+    const title = (watchedTitle || '').trim();
+
+    // Only trigger if description has more than 15 characters
+    if (description.length <= 15) {
+      toast.error('Description must be at least 16 characters');
+      return;
+    }
+
+    setImprovingDescription(true);
+    try {
+      const response = await fetch(`${API_BASE}/tasks/improve-description`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ title: title || undefined, description }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAiImprovedDescription(data.improved);
+      } else {
+        toast.error('AI unavailable, try again');
+      }
+    } catch (error) {
+      console.error('Failed to improve description:', error);
+      toast.error('AI unavailable, try again');
+    } finally {
+      setImprovingDescription(false);
+    }
+  };
+
+  // ── Apply AI improved description ──────────────────────────────────────────
+  const handleApplyImprovedDescription = () => {
+    if (aiImprovedDescription) {
+      setValue('description', aiImprovedDescription, { shouldValidate: true });
+      setAiImprovedDescription(null);
+      toast.success('AI suggestion applied');
+    }
+  };
+
+  // ── Dismiss AI improved description ────────────────────────────────────────
+  const handleDismissImprovedDescription = () => {
+    setAiImprovedDescription(null);
   };
 
   // ── Handle business change ─────────────────────────────────────────────────
@@ -503,8 +955,165 @@ export default function Collaboration() {
     }
   };
 
+  // ── Drag and Drop Handlers ─────────────────────────────────────────────────
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const task = tasks.find((t) => t.id === active.id);
+    setActiveTask(task || null);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Find active and over tasks
+    const activeTask = tasks.find((t) => t.id === activeId);
+    if (!activeTask) return;
+
+    // Check if over a column (status)
+    const overColumn = ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'].includes(overId as string);
+    
+    if (overColumn) {
+      const newStatus = overId as Task['status'];
+      if (activeTask.status !== newStatus) {
+        // Optimistically update UI
+        setTasks((prevTasks) => {
+          const updatedTasks = prevTasks.map((t) =>
+            t.id === activeId ? { ...t, status: newStatus } : t
+          );
+          return updatedTasks;
+        });
+      }
+    } else {
+      // Over another task - handle reordering
+      const overTask = tasks.find((t) => t.id === overId);
+      if (!overTask || activeTask.status !== overTask.status) return;
+
+      setTasks((prevTasks) => {
+        const oldIndex = prevTasks.findIndex((t) => t.id === activeId);
+        const newIndex = prevTasks.findIndex((t) => t.id === overId);
+        return arrayMove(prevTasks, oldIndex, newIndex);
+      });
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveTask(null);
+
+    if (!over || !currentUser) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    const activeTask = tasks.find((t) => t.id === activeId);
+    if (!activeTask) return;
+
+    // Determine new status and order
+    let newStatus: Task['status'] = activeTask.status;
+    let newOrder = 0;
+
+    // Check if dropped on a column
+    const overColumn = ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'].includes(overId as string);
+    
+    if (overColumn) {
+      newStatus = overId as Task['status'];
+      // Get tasks in the new column
+      const tasksInColumn = tasks.filter((t) => t.id !== activeId && t.status === newStatus);
+      newOrder = tasksInColumn.length;
+    } else {
+      // Dropped on another task
+      const overTask = tasks.find((t) => t.id === overId);
+      if (overTask) {
+        newStatus = overTask.status;
+        const tasksInColumn = tasks.filter((t) => t.status === newStatus);
+        const overIndex = tasksInColumn.findIndex((t) => t.id === overId);
+        newOrder = overIndex >= 0 ? overIndex : 0;
+      }
+    }
+
+    // Determine new priority based on status
+    let newPriority: Task['priority'] = activeTask.priority;
+    if (newStatus !== activeTask.status) {
+      // Map status to priority
+      const statusToPriority: Record<Task['status'], Task['priority']> = {
+        TODO: 'LOW',
+        IN_PROGRESS: 'MEDIUM',
+        DONE: 'HIGH',
+        BLOCKED: 'HIGH',
+      };
+      newPriority = statusToPriority[newStatus];
+    }
+
+    // Only make API call if something changed
+    if (activeTask.status !== newStatus || activeTask.priority !== newPriority || activeId !== overId) {
+      try {
+        // Update both status and priority
+        const updates: Partial<Task> = {
+          status: newStatus,
+          priority: newPriority,
+        };
+
+        const payload = { 
+          status: newStatus, 
+          priority: newPriority,
+          order: newOrder 
+        };
+        
+        console.log('Sending to backend:', payload);
+
+        const response = await fetch(`${API_BASE}/tasks/${activeId}/move`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to move task');
+        }
+
+        const updatedTask = await response.json();
+        console.log('Received from backend:', updatedTask);
+
+        // Update local state with the response from backend
+        setTasks((prevTasks) =>
+          prevTasks.map((t) =>
+            t.id === activeId ? updatedTask : t
+          )
+        );
+
+        toast.success(`Task moved to ${newStatus.replace('_', ' ')} with ${newPriority} priority`);
+      } catch (err: any) {
+        // Rollback on error
+        toast.error('Failed to move task');
+        console.error('Move task error:', err);
+        // Reload tasks to get correct state
+        if (currentBusiness) {
+          const fetchedTasks = await fetchTasks(currentBusiness.id);
+          setTasks(fetchedTasks);
+        }
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Daily Check-in Banner - Only for TEAM_MEMBER and ACCOUNTANT */}
+      {currentUser && 
+       (currentUser.role === 'TEAM_MEMBER' || currentUser.role === 'ACCOUNTANT') && 
+       currentBusiness && (
+        <DailyCheckinBanner
+          businessId={currentBusiness.id}
+          userFirstName={currentUser.firstName}
+          assignedTasks={myAssignedTasks}
+          onCheckinComplete={() => setRefreshCheckins(prev => prev + 1)}
+        />
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex-1">
@@ -530,7 +1139,7 @@ export default function Collaboration() {
               </select>
             </div>
           )}
-          {canManageTasks && (
+          {canCreateTasks && (
             <button
               onClick={() => setShowNewTask(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap"
@@ -546,24 +1155,37 @@ export default function Collaboration() {
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="border-b border-gray-200">
           <div className="flex overflow-x-auto">
-            {['tasks', 'team', 'activity', 'notifications'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-6 py-4 font-medium text-sm whitespace-nowrap border-b-2 transition-colors relative ${
-                  activeTab === tab
-                    ? 'border-indigo-600 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                {tab === 'notifications' && unreadCount > 0 && (
-                  <span className="absolute top-2 right-2 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-            ))}
+            {['tasks', 'team', 'activity', 'statistics']
+              .filter((tab) => {
+                // Hide Activity and Statistics tabs for TEAM_MEMBER and ACCOUNTANT
+                if (tab === 'activity' || tab === 'statistics') {
+                  return currentUser?.role === 'BUSINESS_OWNER' || currentUser?.role === 'BUSINESS_ADMIN';
+                }
+                return true;
+              })
+              .map((tab) => {
+                const icons = {
+                  tasks: null,
+                  team: null,
+                  activity: null,
+                  statistics: <BarChart2 className="h-4 w-4" />,
+                };
+                
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-6 py-4 font-medium text-sm whitespace-nowrap border-b-2 transition-colors flex items-center gap-2 ${
+                      activeTab === tab
+                        ? 'border-indigo-600 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {icons[tab as keyof typeof icons]}
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                );
+              })}
           </div>
         </div>
 
@@ -573,67 +1195,105 @@ export default function Collaboration() {
           {/* ── Tasks Tab ───────────────────────────────────────────────────── */}
           {activeTab === 'tasks' && (
             <div className="space-y-6">
-              {loadingTasks && (
-                <div className="flex items-center justify-center py-16 gap-3 text-gray-500">
-                  <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
-                  <span>Loading tasks...</span>
+              {isDisplayLoading && (
+                <div className="grid lg:grid-cols-4 gap-4">
+                  {[...Array(4)].map((_, colIndex) => (
+                    <div key={colIndex} className="space-y-3">
+                      <div className="h-10 bg-gray-200 rounded animate-pulse mb-4"></div>
+                      {[...Array(3)].map((_, cardIndex) => (
+                        <TaskCardSkeleton key={cardIndex} />
+                      ))}
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {!loadingTasks && tasksError && (
+              {!isDisplayLoading && tasksError && (
                 <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
                   <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <span>{tasksError}</span>
                 </div>
               )}
 
-              {!loadingTasks && !tasksError && (
-                <div className="grid lg:grid-cols-4 gap-4">
-                  <KanbanColumn
-                    label="TODO"
-                    icon={<Circle className="h-5 w-5 text-gray-400" />}
-                    tasks={tasksByStatus.TODO}
-                    onUpdateStatus={handleUpdateTaskStatus}
-                    onDelete={handleDeleteTask}
-                    onEdit={handleEditTask}
-                    onOpenChat={setChatTask}
-                    canManage={canManageTasks}
-                    teamMembers={teamMembers}
-                  />
-                  <KanbanColumn
-                    label="IN PROGRESS"
-                    icon={<Clock className="h-5 w-5 text-blue-500" />}
-                    tasks={tasksByStatus.IN_PROGRESS}
-                    onUpdateStatus={handleUpdateTaskStatus}
-                    onDelete={handleDeleteTask}
-                    onEdit={handleEditTask}
-                    onOpenChat={setChatTask}
-                    canManage={canManageTasks}
-                    teamMembers={teamMembers}
-                  />
-                  <KanbanColumn
-                    label="DONE"
-                    icon={<CheckCircle2 className="h-5 w-5 text-green-500" />}
-                    tasks={tasksByStatus.DONE}
-                    onUpdateStatus={handleUpdateTaskStatus}
-                    onDelete={handleDeleteTask}
-                    onEdit={handleEditTask}
-                    onOpenChat={setChatTask}
-                    canManage={canManageTasks}
-                    teamMembers={teamMembers}
-                  />
-                  <KanbanColumn
-                    label="BLOCKED"
-                    icon={<XCircle className="h-5 w-5 text-red-500" />}
-                    tasks={tasksByStatus.BLOCKED}
-                    onUpdateStatus={handleUpdateTaskStatus}
-                    onDelete={handleDeleteTask}
-                    onEdit={handleEditTask}
-                    onOpenChat={setChatTask}
-                    canManage={canManageTasks}
-                    teamMembers={teamMembers}
-                  />
-                </div>
+              {!isDisplayLoading && !tasksError && (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCorners}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragEnd={handleDragEnd}
+                >
+                  <div className="grid lg:grid-cols-4 gap-4">
+                    <DroppableColumn
+                      label="TODO"
+                      icon={<Circle className="h-5 w-5 text-gray-400" />}
+                      status="TODO"
+                      tasks={tasksByStatus.TODO}
+                      onUpdateStatus={handleUpdateTaskStatus}
+                      onDelete={canDeleteTasks ? handleDeleteTask : undefined}
+                      onEdit={canUpdateTasks ? handleEditTask : undefined}
+                      onView={setViewingTask}
+                      onOpenChat={setChatTask}
+                      canManage={canUpdateTasks}
+                      teamMembers={teamMembers}
+                    />
+                    <DroppableColumn
+                      label="IN PROGRESS"
+                      icon={<Clock className="h-5 w-5 text-blue-500" />}
+                      status="IN_PROGRESS"
+                      tasks={tasksByStatus.IN_PROGRESS}
+                      onUpdateStatus={handleUpdateTaskStatus}
+                      onDelete={canDeleteTasks ? handleDeleteTask : undefined}
+                      onEdit={canUpdateTasks ? handleEditTask : undefined}
+                      onView={setViewingTask}
+                      onOpenChat={setChatTask}
+                      canManage={canUpdateTasks}
+                      teamMembers={teamMembers}
+                    />
+                    <DroppableColumn
+                      label="DONE"
+                      icon={<CheckCircle2 className="h-5 w-5 text-green-500" />}
+                      status="DONE"
+                      tasks={tasksByStatus.DONE}
+                      onUpdateStatus={handleUpdateTaskStatus}
+                      onDelete={canDeleteTasks ? handleDeleteTask : undefined}
+                      onEdit={canUpdateTasks ? handleEditTask : undefined}
+                      onView={setViewingTask}
+                      onOpenChat={setChatTask}
+                      canManage={canUpdateTasks}
+                      teamMembers={teamMembers}
+                    />
+                    <DroppableColumn
+                      label="BLOCKED"
+                      icon={<XCircle className="h-5 w-5 text-red-500" />}
+                      status="BLOCKED"
+                      tasks={tasksByStatus.BLOCKED}
+                      onUpdateStatus={handleUpdateTaskStatus}
+                      onDelete={canDeleteTasks ? handleDeleteTask : undefined}
+                      onEdit={canUpdateTasks ? handleEditTask : undefined}
+                      onView={setViewingTask}
+                      onOpenChat={setChatTask}
+                      canManage={canUpdateTasks}
+                      teamMembers={teamMembers}
+                    />
+                  </div>
+                  <DragOverlay>
+                    {activeTask ? (
+                      <div className="rotate-3">
+                        <DraggableTaskCard
+                          task={activeTask}
+                          onUpdateStatus={handleUpdateTaskStatus}
+                          onDelete={canDeleteTasks ? handleDeleteTask : undefined}
+                          onEdit={canUpdateTasks ? handleEditTask : undefined}
+                          onView={setViewingTask}
+                          onOpenChat={setChatTask}
+                          canManage={canUpdateTasks}
+                          teamMembers={teamMembers}
+                        />
+                      </div>
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
               )}
             </div>
           )}
@@ -641,6 +1301,16 @@ export default function Collaboration() {
           {/* ── Team Tab ────────────────────────────────────────────────────── */}
           {activeTab === 'team' && (
             <div className="space-y-4">
+              {/* WebSocket connection status */}
+              {presenceConnected && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  <span className="text-sm text-green-700 font-medium">
+                    Statut de présence en temps réel activé
+                  </span>
+                </div>
+              )}
+
               {/* Toolbar */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="relative flex-1 max-w-md w-full">
@@ -663,15 +1333,31 @@ export default function Collaboration() {
               </div>
 
               {/* Loading state */}
-              {loadingMembers && (
-                <div className="flex items-center justify-center py-16 gap-3 text-gray-500">
-                  <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
-                  <span>Chargement des membres...</span>
+              {isDisplayLoading && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Nom</th>
+                        <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Rôle</th>
+                        <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Email</th>
+                        <th className="text-center px-6 py-3 text-sm font-medium text-gray-500">Présence</th>
+                        <th className="text-center px-6 py-3 text-sm font-medium text-gray-500">Statut</th>
+                        <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Rejoint le</th>
+                        <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {[...Array(5)].map((_, i) => (
+                        <TeamMemberRowSkeleton key={i} />
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
               {/* Error state */}
-              {!loadingMembers && membersError && (
+              {!isDisplayLoading && membersError && (
                 <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
                   <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <span>{membersError}</span>
@@ -679,7 +1365,7 @@ export default function Collaboration() {
               )}
 
               {/* Empty state */}
-              {!loadingMembers && !membersError && filteredMembers.length === 0 && (
+              {!isDisplayLoading && !membersError && filteredMembers.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-3">
                   <Users className="h-12 w-12" />
                   <p className="text-lg font-medium text-gray-500">
@@ -698,7 +1384,7 @@ export default function Collaboration() {
               )}
 
               {/* Members table */}
-              {!loadingMembers && !membersError && filteredMembers.length > 0 && (
+              {!isDisplayLoading && !membersError && filteredMembers.length > 0 && (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-gray-50">
@@ -706,13 +1392,14 @@ export default function Collaboration() {
                         <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Nom</th>
                         <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Rôle</th>
                         <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Email</th>
+                        <th className="text-center px-6 py-3 text-sm font-medium text-gray-500">Présence</th>
                         <th className="text-center px-6 py-3 text-sm font-medium text-gray-500">Statut</th>
                         <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Rejoint le</th>
                         <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {filteredMembers.map((member, index) => {
+                      {displayedMembers.map((member, index) => {
                         const name = getMemberName(member);
                         const initials = getInitials(name);
                         const color = avatarColors[index % avatarColors.length];
@@ -728,10 +1415,19 @@ export default function Collaboration() {
                           <tr key={member.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
-                                <div
-                                  className={`h-10 w-10 rounded-full ${color} flex items-center justify-center text-white font-semibold text-sm flex-shrink-0`}
-                                >
-                                  {initials}
+                                <div className="relative">
+                                  <div
+                                    className={`h-10 w-10 rounded-full ${color} flex items-center justify-center text-white font-semibold text-sm flex-shrink-0`}
+                                  >
+                                    {initials}
+                                  </div>
+                                  {/* Real-time presence indicator */}
+                                  <div className="absolute -bottom-0.5 -right-0.5">
+                                    <PresenceIndicator 
+                                      isOnline={userStatuses.get(member.user_id) === 'online'} 
+                                      size="sm" 
+                                    />
+                                  </div>
                                 </div>
                                 <span className="font-medium text-gray-900">{name}</span>
                               </div>
@@ -747,16 +1443,27 @@ export default function Collaboration() {
                             <td className="px-6 py-4 text-center">
                               <span
                                 className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full ${
-                                  member.is_active
+                                  userStatuses.get(member.user_id) === 'online'
                                     ? 'bg-green-100 text-green-700'
                                     : 'bg-gray-100 text-gray-600'
                                 }`}
                               >
                                 <span
                                   className={`h-1.5 w-1.5 rounded-full ${
-                                    member.is_active ? 'bg-green-500' : 'bg-gray-400'
+                                    userStatuses.get(member.user_id) === 'online' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
                                   }`}
                                 />
+                                {userStatuses.get(member.user_id) === 'online' ? 'En ligne' : 'Hors ligne'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full ${
+                                  member.is_active
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
                                 {member.is_active ? 'Actif' : 'Inactif'}
                               </span>
                             </td>
@@ -764,9 +1471,15 @@ export default function Collaboration() {
                               {joinedDate}
                             </td>
                             <td className="px-6 py-4 text-right">
-                              <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                                <MoreHorizontal className="h-5 w-5" />
-                              </button>
+                              {canManageMemberPermissions(member) && (
+                                <button 
+                                  onClick={() => setSelectedMemberForPermissions(member)}
+                                  className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                  title="Manage permissions"
+                                >
+                                  <Settings className="h-5 w-5" />
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -776,6 +1489,12 @@ export default function Collaboration() {
                   <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 text-sm text-gray-500">
                     {filteredMembers.length} membre{filteredMembers.length > 1 ? 's' : ''} au total
                   </div>
+                  {/* Infinite scroll trigger */}
+                  {hasMoreMembers && (
+                    <div ref={membersObserverTarget} className="py-4 text-center bg-white">
+                      <Loader2 className="h-6 w-6 animate-spin text-indigo-600 mx-auto" />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -783,80 +1502,154 @@ export default function Collaboration() {
 
           {/* ── Activity Tab ─────────────────────────────────────────────────── */}
           {activeTab === 'activity' && (
-            <div className="space-y-4">
-              <div className="relative">
-                {activityData.map((activity, index) => (
-                  <div key={activity.id} className="relative pl-8 pb-8 last:pb-0">
-                    {index !== activityData.length - 1 && (
-                      <div className="absolute left-3 top-8 bottom-0 w-0.5 bg-gray-200" />
-                    )}
-                    <div className="absolute left-0 top-1 h-6 w-6 rounded-full bg-white border-2 border-gray-200 flex items-center justify-center">
-                      <activity.icon className={`h-3 w-3 ${activity.color}`} />
+            <div className="space-y-6">
+              {/* Today's Check-ins Section - Only for OWNER and ADMIN */}
+              {currentBusiness && 
+               (currentUser?.role === 'BUSINESS_OWNER' || currentUser?.role === 'BUSINESS_ADMIN') && (
+                <TodayCheckinsSection 
+                  businessId={currentBusiness.id} 
+                  key={refreshCheckins}
+                />
+              )}
+
+              {loadingActivities ? (
+                <div className="relative">
+                  {[...Array(5)].map((_, i) => (
+                    <ActivityItemSkeleton key={i} />
+                  ))}
+                </div>
+              ) : activitiesError ? (
+                <div className="text-center py-12">
+                  <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                  <p className="text-red-600 font-medium">{activitiesError}</p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    {activitiesError.includes('Only business owners') 
+                      ? 'Activity feed is only visible to Business Owners and Admins'
+                      : 'Please try again later'}
+                  </p>
+                </div>
+              ) : activities.length === 0 ? (
+                <div className="text-center py-12">
+                  <Bell className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 font-medium">No activities yet</p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Team member actions will appear here
+                  </p>
+                </div>
+              ) : (
+                <div className="relative">
+                  {displayedActivities.map((activity, index) => {
+                    const userName = activity.user.firstName && activity.user.lastName
+                      ? `${activity.user.firstName} ${activity.user.lastName}`
+                      : activity.user.email;
+                    
+                    let actionText = '';
+                    let targetText = '';
+                    let icon = CheckCircle2;
+                    let color = 'text-green-600';
+                    let bgColor = 'bg-gray-50';
+                    let borderColor = 'border-gray-200';
+
+                    if (activity.type === 'SUBTASK_COMPLETED' || activity.type === 'SUBTASK_COMPLETED_OVERDUE' || activity.type === 'SUBTASK_COMPLETED_ON_TIME') {
+                      const isOverdue = activity.type === 'SUBTASK_COMPLETED_OVERDUE' || activity.isOverdue;
+                      const isOnTime = activity.type === 'SUBTASK_COMPLETED_ON_TIME' || activity.isOnTime;
+                      
+                      if (isOverdue) {
+                        actionText = 'completed subtask OVERDUE';
+                        icon = AlertCircle;
+                        color = 'text-orange-600';
+                        bgColor = 'bg-orange-50';
+                        borderColor = 'border-orange-200';
+                      } else if (isOnTime) {
+                        actionText = 'completed subtask ON TIME';
+                        icon = CheckCircle2;
+                        color = 'text-green-600';
+                        bgColor = 'bg-green-50';
+                        borderColor = 'border-green-200';
+                      } else {
+                        actionText = 'completed subtask';
+                        icon = CheckCircle2;
+                        color = 'text-green-600';
+                      }
+                      
+                      targetText = activity.subtask?.title || 'Unknown subtask';
+                      if (activity.task) {
+                        targetText += ` in "${activity.task.title}"`;
+                      }
+                    } else if (activity.type === 'TASK_BLOCKED') {
+                      actionText = 'moved task to BLOCKED';
+                      targetText = activity.task?.title || 'Unknown task';
+                      icon = XCircle;
+                      color = 'text-red-600';
+                      bgColor = 'bg-red-50';
+                      borderColor = 'border-red-200';
+                    } else if (activity.type === 'TASK_CREATED') {
+                      actionText = 'created task';
+                      targetText = activity.task?.title || 'Unknown task';
+                      icon = Plus;
+                      color = 'text-indigo-600';
+                    } else if (activity.type === 'TASK_UPDATED') {
+                      actionText = 'updated task';
+                      targetText = activity.task?.title || 'Unknown task';
+                      icon = Edit;
+                      color = 'text-blue-600';
+                    } else if (activity.type === 'TASK_DELETED') {
+                      actionText = 'deleted task';
+                      targetText = activity.task?.title || 'Unknown task';
+                      icon = Trash2;
+                      color = 'text-red-600';
+                    }
+
+                    const timeAgo = formatTimeAgo(new Date(activity.createdAt));
+                    const ActivityIcon = icon;
+
+                    return (
+                      <div key={activity.id} className="relative pl-8 pb-8 last:pb-0">
+                        {index !== activities.length - 1 && (
+                          <div className="absolute left-3 top-8 bottom-0 w-0.5 bg-gray-200" />
+                        )}
+                        <div className={`absolute left-0 top-1 h-6 w-6 rounded-full bg-white border-2 ${borderColor} flex items-center justify-center`}>
+                          <ActivityIcon className={`h-3 w-3 ${color}`} />
+                        </div>
+                        <div className={`${bgColor} rounded-lg p-4 hover:opacity-90 transition-all border ${borderColor}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm text-gray-900 flex-1">
+                              <span className="font-medium">{userName}</span>{' '}
+                              {actionText}{' '}
+                              <span className="font-medium text-indigo-600">{targetText}</span>
+                            </p>
+                            {activity.isOverdue && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200 flex-shrink-0">
+                                <AlertCircle className="h-3 w-3" />
+                                Overdue
+                              </span>
+                            )}
+                            {activity.isOnTime && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 flex-shrink-0">
+                                <CheckCircle2 className="h-3 w-3" />
+                                On Time
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">{timeAgo}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Infinite scroll trigger for activities */}
+                  {hasMoreActivities && (
+                    <div ref={activitiesObserverTarget} className="py-4 text-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-indigo-600 mx-auto" />
                     </div>
-                    <div className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-                      <p className="text-sm text-gray-900">
-                        <span className="font-medium">{activity.user}</span>{' '}
-                        {activity.action}{' '}
-                        <span className="font-medium text-indigo-600">{activity.target}</span>
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
-          {/* ── Notifications Tab ─────────────────────────────────────────────── */}
-          {activeTab === 'notifications' && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="font-medium text-gray-900">
-                  {unreadCount > 0
-                    ? `${unreadCount} notification${unreadCount > 1 ? 's' : ''} non lue${unreadCount > 1 ? 's' : ''}`
-                    : 'Tout est lu !'}
-                </h3>
-                {unreadCount > 0 && (
-                  <button
-                    onClick={markAllAsRead}
-                    className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                  >
-                    Tout marquer comme lu
-                  </button>
-                )}
-              </div>
-              <div className="space-y-2">
-                {notifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`p-4 rounded-lg border transition-colors ${
-                      notification.read ? 'bg-white border-gray-200' : 'bg-indigo-50 border-indigo-200'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div className={`p-2 rounded-lg ${notification.read ? 'bg-gray-100' : 'bg-indigo-100'}`}>
-                          <Bell className={`h-5 w-5 ${notification.read ? 'text-gray-400' : 'text-indigo-600'}`} />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{notification.title}</p>
-                          <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
-                          <p className="text-xs text-gray-500 mt-2">{notification.time}</p>
-                        </div>
-                      </div>
-                      {!notification.read && (
-                        <button
-                          onClick={() => markAsRead(notification.id)}
-                          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium whitespace-nowrap"
-                        >
-                          Marquer comme lu
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* ── Statistics Tab ─────────────────────────────────────────────── */}
+          {activeTab === 'statistics' && currentBusiness && (
+            <StatisticsDashboard businessId={currentBusiness.id} />
           )}
         </div>
       </div>
@@ -864,57 +1657,174 @@ export default function Collaboration() {
       {/* ── New/Edit Task Modal ─────────────────────────────────────────────────────── */}
       {showNewTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl max-w-lg w-full">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <form onSubmit={handleSubmit(onSubmitTask)} className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <h2 className="text-xl font-bold text-gray-900">
                 {editingTask ? 'Edit Task' : 'Create New Task'}
               </h2>
-              <button onClick={handleCloseTaskModal} className="text-gray-400 hover:text-gray-500">
+              <button type="button" onClick={handleCloseTaskModal} className="text-gray-400 hover:text-gray-500">
                 <XCircle className="h-6 w-6" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Task Title</label>
                 <input
                   type="text"
-                  value={newTaskForm.title}
-                  onChange={(e) => setNewTaskForm({ ...newTaskForm, title: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  {...register('title')}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                    errors.title 
+                      ? 'border-red-500' 
+                      : touchedFields.title 
+                      ? 'border-green-500' 
+                      : 'border-gray-300'
+                  }`}
                   placeholder="Enter task title"
                 />
+                {errors.title && (
+                  <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>
+                )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center justify-between">
+                  <span>Description</span>
+                  <button
+                    type="button"
+                    onClick={handleImproveDescription}
+                    disabled={improvingDescription || (watchedDescription || '').trim().length <= 15}
+                    className="inline-flex items-center gap-1 px-3 py-1 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {improvingDescription ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Improving...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" />
+                        Improve with AI
+                      </>
+                    )}
+                  </button>
+                </label>
                 <textarea
                   rows={3}
-                  value={newTaskForm.description}
-                  onChange={(e) => setNewTaskForm({ ...newTaskForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Task description"
+                  {...register('description')}
+                  onBlur={(e) => {
+                    register('description').onBlur(e);
+                    handleDetectPriority();
+                  }}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                    errors.description 
+                      ? 'border-red-500' 
+                      : touchedFields.description 
+                      ? 'border-green-500' 
+                      : 'border-gray-300'
+                  }`}
+                  placeholder="Task description (min 16 characters for AI improvement)"
                 />
+                {errors.description && (
+                  <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
+                )}
+                {watchedDescription && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    {watchedDescription.length} / 500 characters
+                  </p>
+                )}
+                
+                {/* AI Improved Description Preview */}
+                {aiImprovedDescription && (
+                  <div className="mt-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                    <div className="flex items-start gap-2 mb-2">
+                      <Sparkles className="h-5 w-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-purple-900 mb-1">AI Suggestion</h4>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{aiImprovedDescription}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={handleApplyImprovedDescription}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
+                      >
+                        <Check className="h-4 w-4" />
+                        Apply
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDismissImprovedDescription}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    Priority
+                    {detectingPriority && (
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                    )}
+                  </label>
                   <select
-                    value={newTaskForm.priority}
-                    onChange={(e) => setNewTaskForm({ ...newTaskForm, priority: e.target.value as Task['priority'] })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    {...register('priority')}
+                    onChange={(e) => {
+                      register('priority').onChange(e);
+                      setAiSuggestedPriority(null); // Clear suggestion when manually changed
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                      errors.priority 
+                        ? 'border-red-500' 
+                        : touchedFields.priority 
+                        ? 'border-green-500' 
+                        : 'border-gray-300'
+                    }`}
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
                     <option value="HIGH">High</option>
                   </select>
+                  {errors.priority && (
+                    <p className="mt-1 text-sm text-red-600">{errors.priority.message}</p>
+                  )}
+                  {aiSuggestedPriority && (
+                    <div className="mt-2 flex items-center gap-2 text-sm">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-700 rounded-md">
+                        <span className="text-base">✨</span>
+                        AI suggested: {aiSuggestedPriority}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setAiSuggestedPriority(null)}
+                        className="text-gray-400 hover:text-gray-600"
+                        title="Dismiss suggestion"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
                   <input
                     type="date"
-                    value={newTaskForm.dueDate}
-                    onChange={(e) => setNewTaskForm({ ...newTaskForm, dueDate: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    {...register('dueDate')}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                      errors.dueDate 
+                        ? 'border-red-500' 
+                        : touchedFields.dueDate 
+                        ? 'border-green-500' 
+                        : 'border-gray-300'
+                    }`}
                   />
+                  {errors.dueDate && (
+                    <p className="mt-1 text-sm text-red-600">{errors.dueDate.message}</p>
+                  )}
                 </div>
               </div>
               <div>
@@ -926,7 +1836,7 @@ export default function Collaboration() {
                     teamMembers.map((member) => {
                       const name = getMemberName(member);
                       const initials = getInitials(name);
-                      const isChecked = newTaskForm.assignedToIds.includes(member.user_id);
+                      const isChecked = (watchedAssignedToIds || []).includes(member.user_id);
                       
                       return (
                         <label
@@ -953,28 +1863,58 @@ export default function Collaboration() {
                     })
                   )}
                 </div>
-                {newTaskForm.assignedToIds.length > 0 && (
+                {(watchedAssignedToIds || []).length > 0 && (
                   <p className="text-xs text-gray-500 mt-2">
-                    {newTaskForm.assignedToIds.length} member{newTaskForm.assignedToIds.length > 1 ? 's' : ''} selected
+                    {watchedAssignedToIds.length} member{watchedAssignedToIds.length > 1 ? 's' : ''} selected
                   </p>
                 )}
               </div>
+
+              {/* Subtasks Section - Only show when editing existing task */}
+              {editingTask && currentBusiness && (
+                <div className="pt-4 border-t border-gray-200">
+                  <SubtaskList
+                    taskId={editingTask.id}
+                    taskTitle={watchedTitle || ''}
+                    taskDescription={watchedDescription || ''}
+                    businessId={currentBusiness.id}
+                    currentMember={currentMember}
+                    canMarkComplete={currentUser?.role === 'TEAM_MEMBER' || currentUser?.role === 'ACCOUNTANT'}
+                    onProgressUpdate={() => {
+                      // Rafraîchir les tâches pour mettre à jour la progression visible
+                      if (currentBusiness) {
+                        fetchTasks(currentBusiness.id).then(setTasks).catch(console.error);
+                      }
+                    }}
+                  />
+                </div>
+              )}
             </div>
-            <div className="p-6 border-t border-gray-200 flex gap-3">
+            <div className="p-6 border-t border-gray-200 flex gap-3 flex-shrink-0">
               <button
+                type="button"
                 onClick={handleCloseTaskModal}
-                className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+                disabled={isSubmitting}
+                className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={editingTask ? handleUpdateTask : handleCreateTask}
-                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
+                type="submit"
+                disabled={isSubmitting || Object.keys(errors).length > 0}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {editingTask ? 'Update Task' : 'Create Task'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    {editingTask ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  editingTask ? 'Update Task' : 'Create Task'
+                )}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -1031,204 +1971,43 @@ export default function Collaboration() {
       )}
 
       {/* ── Task Chat Modal ────────────────────────────────────────────────────── */}
-      {chatTask && currentUser && (
+      {chatTask && currentUser && currentBusiness && (
         <TaskChat
           taskId={chatTask.id}
           taskTitle={chatTask.title}
           currentUserId={currentUser.id}
+          businessId={currentBusiness.id}
           onClose={() => setChatTask(null)}
         />
       )}
-    </div>
-  );
-}
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+      {/* ── Subtask View Modal (TEAM_MEMBER) ──────────────────────────────────── */}
+      {viewingTask && currentBusiness ? (
+        <SubtaskViewModal
+          task={viewingTask}
+          businessId={currentBusiness.id}
+          onClose={() => {
+            console.log('🚪 Closing SubtaskViewModal');
+            setViewingTask(null);
+          }}
+          onProgressUpdate={() => {
+            if (currentBusiness) {
+              fetchTasks(currentBusiness.id).then(setTasks).catch(console.error);
+            }
+          }}
+        />
+      ) : null}
 
-function KanbanColumn({
-  label,
-  icon,
-  tasks,
-  onUpdateStatus,
-  onDelete,
-  onEdit,
-  onOpenChat,
-  canManage,
-  teamMembers,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  tasks: Task[];
-  onUpdateStatus: (taskId: string, newStatus: Task['status']) => void;
-  onDelete: (taskId: string) => void;
-  onEdit: (task: Task) => void;
-  onOpenChat: (task: Task) => void;
-  canManage: boolean;
-  teamMembers: TeamMember[];
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 mb-4">
-        {icon}
-        <h3 className="font-semibold text-gray-900 text-sm">{label}</h3>
-        <span className="text-sm text-gray-500">({tasks.length})</span>
-      </div>
-      <div className="space-y-3">
-        {tasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            onUpdateStatus={onUpdateStatus}
-            onDelete={onDelete}
-            onEdit={onEdit}
-            onOpenChat={onOpenChat}
-            canManage={canManage}
-            teamMembers={teamMembers}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TaskCard({
-  task,
-  onUpdateStatus,
-  onDelete,
-  onEdit,
-  onOpenChat,
-  canManage,
-  teamMembers,
-}: {
-  task: Task;
-  onUpdateStatus: (taskId: string, newStatus: Task['status']) => void;
-  onDelete: (taskId: string) => void;
-  onEdit: (task: Task) => void;
-  onOpenChat: (task: Task) => void;
-  canManage: boolean;
-  teamMembers: TeamMember[];
-}) {
-  const [showMenu, setShowMenu] = useState(false);
-
-  const statusOptions: Task['status'][] = ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'];
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between mb-3">
-        <h4 className="font-medium text-gray-900 text-sm flex-1">{task.title}</h4>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onOpenChat(task)}
-            className="text-gray-400 hover:text-indigo-600 transition-colors"
-            title="Open chat"
-          >
-            <MessageSquare className="h-4 w-4" />
-          </button>
-          {canManage && (
-            <div className="relative">
-              <button
-                onClick={() => setShowMenu(!showMenu)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-              {showMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                  <div className="py-1">
-                    <button
-                      onClick={() => {
-                        onEdit(task);
-                        setShowMenu(false);
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                    >
-                      <Edit className="h-4 w-4" />
-                      Edit
-                    </button>
-                    <div className="border-t border-gray-100 my-1" />
-                    <div className="px-4 py-2 text-xs font-medium text-gray-500">Change Status</div>
-                    {statusOptions.map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => {
-                          onUpdateStatus(task.id, status);
-                          setShowMenu(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                          task.status === status ? 'text-indigo-600 font-medium' : 'text-gray-700'
-                        }`}
-                      >
-                        {status.replace('_', ' ')}
-                      </button>
-                    ))}
-                    <div className="border-t border-gray-100 my-1" />
-                    <button
-                      onClick={() => {
-                        onDelete(task.id);
-                        setShowMenu(false);
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        
-      </div>
-      {task.description && (
-        <p className="text-xs text-gray-600 mb-3 line-clamp-2">{task.description}</p>
+      {/* ── Permission Management Modal ────────────────────────────────────────── */}
+      {selectedMemberForPermissions && currentBusiness && (
+        <PermissionManagementModal
+          member={selectedMemberForPermissions as any}
+          businessId={currentBusiness.id}
+          isOpen={!!selectedMemberForPermissions}
+          onClose={() => setSelectedMemberForPermissions(null)}
+          onSuccess={loadMembers}
+        />
       )}
-      <div className="flex items-center justify-between">
-        <span
-          className={`px-2 py-1 text-xs font-medium rounded border ${
-            priorityColors[task.priority]
-          }`}
-        >
-          {priorityLabels[task.priority]}
-        </span>
-        <div className="flex items-center gap-2">
-          {task.dueDate && (
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <Calendar className="h-3 w-3" />
-              {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </div>
-          )}
-          {task.assignedTo && task.assignedTo.length > 0 && (
-            <div className="flex -space-x-2">
-              {task.assignedTo.slice(0, 3).map((user, index) => {
-                const name = user.firstName && user.lastName 
-                  ? `${user.firstName} ${user.lastName}` 
-                  : user.email;
-                const initials = getInitials(name);
-                
-                return (
-                  <div
-                    key={user.id}
-                    className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-medium border-2 border-white"
-                    title={name}
-                    style={{ zIndex: task.assignedTo!.length - index }}
-                  >
-                    {initials}
-                  </div>
-                );
-              })}
-              {task.assignedTo.length > 3 && (
-                <div
-                  className="h-7 w-7 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-medium border-2 border-white"
-                  title={`+${task.assignedTo.length - 3} more`}
-                >
-                  +{task.assignedTo.length - 3}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

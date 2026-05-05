@@ -1,0 +1,294 @@
+/* ============================================
+   Thèmes de Couleur pour Daltonisme
+   ============================================ */
+
+/* ═══════════════════════════════════════════
+   PROTANOPIE (Rouge-Vert)
+   Difficulté à percevoir le rouge
+   ═══════════════════════════════════════════ */
+
+.theme-protanopia {
+  /* Remplacer les rouges par des bleus/oranges */
+  --color-primary: #0ea5e9; /* Bleu ciel au lieu d'indigo */
+  --color-success: #0891b2; /* Cyan au lieu de vert */
+  --color-danger: #f97316; /* Orange au lieu de rouge */
+  --color-warning: #eab308; /* Jaune */
+  --color-info: #06b6d4; /* Cyan */
+}
+
+.theme-protanopia .bg-indigo-600,
+.theme-protanopia .bg-indigo-500 {
+  background-color: #0ea5e9 !important;
+}
+
+.theme-protanopia .text-indigo-600 {
+  color: #0ea5e9 !important;
+}
+
+.theme-protanopia .bg-red-500,
+.theme-protanopia .bg-red-600 {
+  background-color: #f97316 !important;
+}
+
+.theme-protanopia .text-red-500,
+.theme-protanopia .text-red-600 {
+  color: #f97316 !important;
+}
+
+.theme-protanopia .bg-green-500,
+.theme-protanopia .bg-green-600 {
+  background-color: #0891b2 !important;
+}
+
+.theme-protanopia .text-green-500,
+.theme-protanopia .text-green-600 {
+  color: #0891b2 !important;
+}
+
+.theme-protanopia .border-indigo-500 {
+  border-color: #0ea5e9 !important;
+}
+
+.theme-protanopia .border-red-500 {
+  border-color: #f97316 !important;
+}
+
+.theme-protanopia .border-green-500 {
+  border-color: #0891b2 !important;
+}
+
+/* ═══════════════════════════════════════════
+   DEUTÉRANOPIE (Rouge-Vert)
+   Difficulté à percevoir le vert
+   ═══════════════════════════════════════════ */
+
+.theme-deuteranopia {
+  --color-primary: #3b82f6; /* Bleu */
+  --color-success: #06b6d4; /* Cyan au lieu de vert */
+  --color-danger: #f59e0b; /* Ambre au lieu de rouge */
+  --color-warning: #eab308; /* Jaune */
+  --color-info: #0ea5e9; /* Bleu ciel */
+}
+
+.theme-deuteranopia .bg-indigo-600,
+.theme-deuteranopia .bg-indigo-500 {
+  background-color: #3b82f6 !important;
+}
+
+.theme-deuteranopia .text-indigo-600 {
+  color: #3b82f6 !important;
+}
+
+.theme-deuteranopia .bg-red-500,
+.theme-deuteranopia .bg-red-600 {
+  background-color: #f59e0b !important;
+}
+
+.theme-deuteranopia .text-red-500,
+.theme-deuteranopia .text-red-600 {
+  color: #f59e0b !important;
+}
+
+.theme-deuteranopia .bg-green-500,
+.theme-deuteranopia .bg-green-600 {
+  background-color: #06b6d4 !important;
+}
+
+.theme-deuteranopia .text-green-500,
+.theme-deuteranopia .text-green-600 {
+  color: #06b6d4 !important;
+}
+
+.theme-deuteranopia .border-indigo-500 {
+  border-color: #3b82f6 !important;
+}
+
+.theme-deuteranopia .border-red-500 {
+  border-color: #f59e0b !important;
+}
+
+.theme-deuteranopia .border-green-500 {
+  border-color: #06b6d4 !important;
+}
+
+/* ═══════════════════════════════════════════
+   TRITANOPIE (Bleu-Jaune)
+   Difficulté à percevoir le bleu et le jaune
+   ═══════════════════════════════════════════ */
+
+.theme-tritanopia {
+  --color-primary: #ec4899; /* Rose au lieu de bleu */
+  --color-success: #10b981; /* Vert */
+  --color-danger: #ef4444; /* Rouge */
+  --color-warning: #f97316; /* Orange au lieu de jaune */
+  --color-info: #8b5cf6; /* Violet au lieu de bleu */
+}
+
+.theme-tritanopia .bg-indigo-600,
+.theme-tritanopia .bg-indigo-500 {
+  background-color: #ec4899 !important;
+}
+
+.theme-tritanopia .text-indigo-600 {
+  color: #ec4899 !important;
+}
+
+.theme-tritanopia .bg-blue-500,
+.theme-tritanopia .bg-blue-600 {
+  background-color: #8b5cf6 !important;
+}
+
+.theme-tritanopia .text-blue-500,
+.theme-tritanopia .text-blue-600 {
+  color: #8b5cf6 !important;
+}
+
+.theme-tritanopia .bg-yellow-500,
+.theme-tritanopia .bg-yellow-600 {
+  background-color: #f97316 !important;
+}
+
+.theme-tritanopia .text-yellow-500,
+.theme-tritanopia .text-yellow-600 {
+  color: #f97316 !important;
+}
+
+.theme-tritanopia .border-indigo-500 {
+  border-color: #ec4899 !important;
+}
+
+.theme-tritanopia .border-blue-500 {
+  border-color: #8b5cf6 !important;
+}
+
+.theme-tritanopia .border-yellow-500 {
+  border-color: #f97316 !important;
+}
+
+/* ═══════════════════════════════════════════
+   MONOCHROME (Noir et Blanc)
+   Achromatopsie - Aucune perception des couleurs
+   ═══════════════════════════════════════════ */
+
+.theme-monochrome {
+  --color-primary: #374151;
+  --color-success: #6b7280;
+  --color-danger: #1f2937;
+  --color-warning: #9ca3af;
+  --color-info: #4b5563;
+}
+
+.theme-monochrome * {
+  filter: grayscale(100%) !important;
+}
+
+.theme-monochrome .bg-indigo-600,
+.theme-monochrome .bg-indigo-500 {
+  background-color: #374151 !important;
+}
+
+.theme-monochrome .text-indigo-600 {
+  color: #374151 !important;
+}
+
+.theme-monochrome .bg-red-500,
+.theme-monochrome .bg-red-600 {
+  background-color: #1f2937 !important;
+}
+
+.theme-monochrome .text-red-500,
+.theme-monochrome .text-red-600 {
+  color: #1f2937 !important;
+}
+
+.theme-monochrome .bg-green-500,
+.theme-monochrome .bg-green-600 {
+  background-color: #6b7280 !important;
+}
+
+.theme-monochrome .text-green-500,
+.theme-monochrome .text-green-600 {
+  color: #6b7280 !important;
+}
+
+.theme-monochrome .bg-yellow-500,
+.theme-monochrome .bg-yellow-600 {
+  background-color: #9ca3af !important;
+}
+
+.theme-monochrome .text-yellow-500,
+.theme-monochrome .text-yellow-600 {
+  color: #9ca3af !important;
+}
+
+/* Améliorer les contrastes en monochrome */
+.theme-monochrome .border {
+  border-width: 2px !important;
+}
+
+.theme-monochrome button {
+  border: 2px solid #000 !important;
+}
+
+/* ═══════════════════════════════════════════
+   STYLES COMMUNS POUR TOUS LES THÈMES
+   ═══════════════════════════════════════════ */
+
+/* Ajouter des motifs/textures pour différencier */
+.theme-protanopia .bg-red-500::before,
+.theme-deuteranopia .bg-red-500::before,
+.theme-tritanopia .bg-red-500::before {
+  content: '⚠️';
+  margin-right: 4px;
+}
+
+.theme-protanopia .bg-green-500::before,
+.theme-deuteranopia .bg-green-500::before {
+  content: '✓';
+  margin-right: 4px;
+}
+
+/* Améliorer les focus rings pour tous les thèmes */
+[class*="theme-"] *:focus-visible {
+  outline-width: 3px !important;
+  outline-offset: 3px !important;
+}
+
+/* ═══════════════════════════════════════════
+   BADGES ET STATUTS
+   ═══════════════════════════════════════════ */
+
+/* Ajouter des icônes pour les statuts */
+.theme-protanopia [class*="badge"],
+.theme-deuteranopia [class*="badge"],
+.theme-tritanopia [class*="badge"],
+.theme-monochrome [class*="badge"] {
+  font-weight: 700 !important;
+  border: 2px solid currentColor !important;
+}
+
+/* ═══════════════════════════════════════════
+   GRAPHIQUES ET VISUALISATIONS
+   ═══════════════════════════════════════════ */
+
+/* Utiliser des motifs au lieu de couleurs seules */
+.theme-protanopia [class*="chart"],
+.theme-deuteranopia [class*="chart"],
+.theme-tritanopia [class*="chart"] {
+  /* Ajouter des hachures ou motifs */
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(0, 0, 0, 0.1) 10px,
+    rgba(0, 0, 0, 0.1) 20px
+  );
+}
+
+/* ═══════════════════════════════════════════
+   TRANSITIONS DOUCES
+   ═══════════════════════════════════════════ */
+
+[class*="theme-"] * {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease !important;
+}

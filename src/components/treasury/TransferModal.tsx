@@ -30,6 +30,7 @@ export default function TransferModal({
   const [form, setForm] = useState<CreateTransferDto>(defaultForm);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof CreateTransferDto, string>>>({});
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const activeAccounts = accounts.filter((a) => a.is_active);
 
@@ -41,6 +42,7 @@ export default function TransferModal({
         transfer_date: new Date().toISOString().split('T')[0],
       });
       setErrors({});
+      setServerError(null);
     }
   }, [open, preselectedFromId]);
 
@@ -66,6 +68,7 @@ export default function TransferModal({
     if (!validate()) return;
 
     setSubmitting(true);
+    setServerError(null);
     try {
       await onSubmit({
         from_account_id: form.from_account_id,
@@ -76,6 +79,15 @@ export default function TransferModal({
         notes: form.notes?.trim() || undefined,
       });
       onClose();
+    } catch (err: any) {
+      const data = err?.response?.data;
+      const message =
+        typeof data?.message === 'string'
+          ? data.message
+          : Array.isArray(data?.message)
+          ? data.message.join(', ')
+          : 'Transfer failed. Please try again.';
+      setServerError(message);
     } finally {
       setSubmitting(false);
     }
@@ -244,6 +256,14 @@ export default function TransferModal({
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
             />
           </div>
+
+          {/* Server Error */}
+          {serverError && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-lg text-sm">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{serverError}</span>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-3 pt-2">

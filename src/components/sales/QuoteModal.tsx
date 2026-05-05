@@ -1,29 +1,47 @@
 // src/components/sales/QuoteModal.tsx
 import { useFieldArray, useForm } from 'react-hook-form';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { X, Plus, Trash2, Package, Wrench } from 'lucide-react';
+import { quoteSchema, QuoteFormValues } from '@/schemas/sales.schemas';
 import { useCreateQuote, useUpdateQuote } from '@/hooks/useQuotes';
 import { useClients } from '@/hooks/useClients';
 import { CreateQuoteItemDto } from '@/types/quote';
 import { useState } from 'react';
 import ProductSelector from './ProductSelector';
-import { Product } from '@/types/product';
+import { Product, ProductType } from '@/types/product';
 
 const TIMBRE_FISCAL = 1.000;
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
-interface QuoteFormValues {
-  clientId: string;
-  quoteDate?: string;
-  validUntil?: string;
-  notes?: string;
-  items: {
-    productId?: string;
-    description: string;
-    quantity: number;
-    unitPrice: number;
-    taxRate: number;
-  }[];
-}
+// ── Composant Field avec erreur ───────────────────────────────────────────────
+const Field = ({
+  label, error, required, children,
+}: { label: string; error?: string; required?: boolean; children: React.ReactNode }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {label} {required && <span className="text-red-500">*</span>}
+    </label>
+    {children}
+    {error && (
+      <div className="flex items-start gap-1.5 mt-1.5">
+        <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+        </svg>
+        <p className="text-red-600 text-xs font-medium">{error}</p>
+      </div>
+    )}
+  </div>
+);
+
+const inputCls = (error?: string) =>
+  `w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm transition-colors ${
+    error ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200' : 'border-gray-300'
+  }`;
+
+const inputSmallCls = (error?: string) =>
+  `w-full px-2 py-1 border rounded text-sm transition-colors ${
+    error ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200' : 'border-gray-200'
+  }`;
 
 interface Props {
   businessId: string;
@@ -37,6 +55,7 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
   const { data: clientsData } = useClients(businessId, { limit: 100 });
   const [error, setError] = useState<string | null>(null);
   const [itemStocks, setItemStocks] = useState<{ [key: number]: { stock: number; isStockable: boolean } }>({});
+  const [itemTypeFilters, setItemTypeFilters] = useState<{ [key: number]: ProductType | undefined }>({});
 
   const isEdit = !!quote;
 
@@ -48,24 +67,25 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<QuoteFormValues>({
+    resolver: zodResolver(quoteSchema),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: isEdit ? {
-      clientId: quote.clientId || '',
-      quoteDate: quote.quoteDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-      validUntil: quote.validUntil?.split('T')[0] || '',
+      client_id: quote.clientId || '',
+      valid_until: quote.validUntil?.split('T')[0] || '',
       notes: quote.notes || '',
       items: quote.items?.map((item: any) => ({
         description: item.description,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        taxRate: item.taxRate,
-        productId: item.productId,
-      })) || [{ description: '', quantity: 1, unitPrice: 0, taxRate: 19 }],
+        unit_price: item.unitPrice,
+        tax_rate: item.taxRate,
+        product_id: item.productId || '',
+      })) || [{ description: '', quantity: 1, unit_price: 0, tax_rate: 19, product_id: '' }],
     } : {
-      clientId: '',
-      quoteDate: new Date().toISOString().split('T')[0],
-      validUntil: '',
+      client_id: '',
+      valid_until: '',
       notes: '',
-      items: [{ description: '', quantity: 1, unitPrice: 0, taxRate: 19 }],
+      items: [{ description: '', quantity: 1, unit_price: 0, tax_rate: 19, product_id: '' }],
     },
   });
 
@@ -74,8 +94,8 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
 
   const computed = (watchedItems || []).map(l => {
     const qty = Number(l?.quantity) || 0;
-    const price = Number(l?.unitPrice) || 0;
-    const rate = Number(l?.taxRate) || 0;
+    const price = Number(l?.unit_price) || 0;
+    const rate = Number(l?.tax_rate) || 0;
     const total = round3(qty * price);
     const tax = round3(total * (rate / 100));
     return { total, tax };
@@ -85,19 +105,35 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
   const taxAmount = round3(computed.reduce((s, c) => s + (c?.tax || 0), 0));
   const netAmount = round3(subtotal + taxAmount + TIMBRE_FISCAL);
 
+  const handleProductTypeFilterChange = (index: number, productType: ProductType | undefined) => {
+    setItemTypeFilters(prev => ({
+      ...prev,
+      [index]: productType
+    }));
+    // Clear selected product when changing filter
+    setValue(`items.${index}.product_id`, '');
+    setValue(`items.${index}.description`, '');
+    setValue(`items.${index}.unit_price`, 0);
+    setItemStocks(prev => {
+      const newStocks = { ...prev };
+      delete newStocks[index];
+      return newStocks;
+    });
+  };
+
   const handleProductSelect = (index: number, product: Product | null) => {
     if (product) {
-      setValue(`items.${index}.productId`, product.id);
+      setValue(`items.${index}.product_id`, product.id);
       setValue(`items.${index}.description`, product.name);
-      setValue(`items.${index}.unitPrice`, product.sale_price_ht);
+      setValue(`items.${index}.unit_price`, product.sale_price_ht);
       setItemStocks(prev => ({
         ...prev,
         [index]: { stock: product.current_stock || 0, isStockable: product.is_stockable }
       }));
     } else {
-      setValue(`items.${index}.productId`, undefined);
+      setValue(`items.${index}.product_id`, '');
       setValue(`items.${index}.description`, '');
-      setValue(`items.${index}.unitPrice`, 0);
+      setValue(`items.${index}.unit_price`, 0);
       setItemStocks(prev => {
         const newStocks = { ...prev };
         delete newStocks[index];
@@ -130,18 +166,17 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
         }
       }
       
-      const items = values.items.map((item, i) => ({
+      const items = values.items.map((item) => ({
         description: item.description,
         quantity: Number(item.quantity) || 0,
-        unitPrice: Number(item.unitPrice) || 0,
-        taxRate: Number(item.taxRate) || 0,
-        ...(item.productId ? { productId: item.productId } : {}),
+        unitPrice: Number(item.unit_price) || 0,
+        taxRate: Number(item.tax_rate) || 0,
+        ...(item.product_id ? { productId: item.product_id } : {}),
       })) as CreateQuoteItemDto[];
 
       const payload = {
-        clientId: values.clientId,
-        quoteDate: values.quoteDate || undefined,
-        validUntil: values.validUntil || undefined,
+        clientId: values.client_id,
+        validUntil: values.valid_until || undefined,
         notes: values.notes || undefined,
         items,
       };
@@ -176,15 +211,10 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Client <span className="text-red-500">*</span>
-              </label>
+            <Field label="Client" error={errors.client_id?.message} required>
               <select
-                {...register('clientId', { required: 'Client requis' })}
-                className={`w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 ${
-                  errors.clientId ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                }`}
+                {...register('client_id')}
+                className={inputCls(errors.client_id?.message)}
               >
                 <option value="">Sélectionner un client</option>
                 {clientsData?.clients?.map((client) => (
@@ -193,31 +223,15 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
                   </option>
                 ))}
               </select>
-              {errors.clientId && (
-                <p className="text-red-500 text-xs mt-1">{errors.clientId.message}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date du devis
-              </label>
+            </Field>
+
+            <Field label="Valide jusqu'au" error={errors.valid_until?.message} required>
               <input
                 type="date"
-                {...register('quoteDate')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                {...register('valid_until')}
+                className={inputCls(errors.valid_until?.message)}
               />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Valide jusqu'au
-            </label>
-            <input
-              type="date"
-              {...register('validUntil')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-            />
+            </Field>
           </div>
 
           {/* Lignes */}
@@ -226,18 +240,27 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
               <span className="font-medium text-gray-900">Lignes</span>
               <button
                 type="button"
-                onClick={() => append({ description: '', quantity: 1, unitPrice: 0, taxRate: 19 })}
+                onClick={() => append({ description: '', quantity: 1, unit_price: 0, tax_rate: 19, product_id: '' })}
                 className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
               >
                 <Plus className="h-4 w-4" /> Ajouter
               </button>
             </div>
 
+            {errors.items?.message && (
+              <div className="text-red-600 text-sm mb-2 flex items-center gap-1.5">
+                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {errors.items.message}
+              </div>
+            )}
+
             <div className="border border-gray-200 rounded-xl overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Produit *</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Type & Produit *</th>
                     <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 w-24">Qté *</th>
                     <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 w-32">Prix HT *</th>
                     <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 w-24">TVA</th>
@@ -248,46 +271,102 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
                 <tbody className="divide-y divide-gray-100">
                   {fields.map((field, i) => {
                     const stockWarning = getStockWarning(i);
+                    const hasError = errors.items?.[i];
                     return (
-                    <tr key={field.id} className={stockWarning ? 'bg-red-50' : ''}>
+                    <tr key={field.id} className={stockWarning || hasError ? 'bg-red-50' : ''}>
                       <td className="px-4 py-2">
+                        {/* Product Type Filter */}
+                        <div className="flex gap-2 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => handleProductTypeFilterChange(i, undefined)}
+                            className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border transition-colors ${
+                              !itemTypeFilters[i] 
+                                ? 'bg-indigo-100 border-indigo-300 text-indigo-700' 
+                                : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            Tous
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleProductTypeFilterChange(i, ProductType.PHYSICAL)}
+                            className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border transition-colors ${
+                              itemTypeFilters[i] === ProductType.PHYSICAL 
+                                ? 'bg-blue-100 border-blue-300 text-blue-700' 
+                                : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            <Package className="h-3 w-3" />
+                            Produit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleProductTypeFilterChange(i, ProductType.SERVICE)}
+                            className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border transition-colors ${
+                              itemTypeFilters[i] === ProductType.SERVICE 
+                                ? 'bg-green-100 border-green-300 text-green-700' 
+                                : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            <Wrench className="h-3 w-3" />
+                            Service
+                          </button>
+                        </div>
+                        
+                        {/* Product Selector */}
                         <ProductSelector
-                          value={watchedItems[i]?.productId}
+                          businessId={businessId}
+                          value={watchedItems[i]?.product_id}
                           onChange={(product) => handleProductSelect(i, product)}
-                          className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                          className={inputSmallCls(errors.items?.[i]?.product_id?.message)}
+                          filterByType={itemTypeFilters[i]}
+                          showType={false} // Hide type in dropdown since we have buttons
                         />
-                        <input type="hidden" {...register(`items.${i}.productId`)} />
-                        <input type="hidden" {...register(`items.${i}.description`, { required: true })} />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          {...register(`items.${i}.quantity`, { valueAsNumber: true })}
-                          className={`w-full px-2 py-1 border rounded text-sm text-center ${stockWarning ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
-                        />
-                        {stockWarning && (
-                          <div className="text-xs text-red-600 mt-1">{stockWarning}</div>
+                        <input type="hidden" {...register(`items.${i}.product_id`)} />
+                        <input type="hidden" {...register(`items.${i}.description`)} />
+                        {errors.items?.[i]?.description?.message && (
+                          <p className="text-red-600 text-xs mt-1">{errors.items[i]?.description?.message}</p>
                         )}
                       </td>
                       <td className="px-4 py-2">
                         <input
                           type="number"
                           step="0.001"
-                          {...register(`items.${i}.unitPrice`, { valueAsNumber: true })}
-                          className="w-full px-2 py-1 border border-gray-200 rounded text-sm text-right"
+                          {...register(`items.${i}.quantity`, { valueAsNumber: true })}
+                          className={inputSmallCls(errors.items?.[i]?.quantity?.message || stockWarning)}
                         />
+                        {stockWarning && (
+                          <div className="text-xs text-red-600 mt-1">{stockWarning}</div>
+                        )}
+                        {errors.items?.[i]?.quantity?.message && (
+                          <p className="text-red-600 text-xs mt-1">{errors.items[i]?.quantity?.message}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="number"
+                          step="0.001"
+                          {...register(`items.${i}.unit_price`, { valueAsNumber: true })}
+                          className={`${inputSmallCls(errors.items?.[i]?.unit_price?.message)} text-right`}
+                        />
+                        {errors.items?.[i]?.unit_price?.message && (
+                          <p className="text-red-600 text-xs mt-1">{errors.items[i]?.unit_price?.message}</p>
+                        )}
                       </td>
                       <td className="px-4 py-2">
                         <select
-                          {...register(`items.${i}.taxRate`, { valueAsNumber: true })}
-                          className="w-full px-2 py-1 border border-gray-200 rounded text-sm text-center"
+                          {...register(`items.${i}.tax_rate`, { valueAsNumber: true })}
+                          className={`${inputSmallCls(errors.items?.[i]?.tax_rate?.message)} text-center`}
                         >
                           <option value="0">0%</option>
                           <option value="7">7%</option>
                           <option value="13">13%</option>
                           <option value="19">19%</option>
                         </select>
+                        {errors.items?.[i]?.tax_rate?.message && (
+                          <p className="text-red-600 text-xs mt-1">{errors.items[i]?.tax_rate?.message}</p>
+                        )}
                       </td>
                       <td className="px-4 py-2 text-right text-sm font-medium">
                         {computed[i]?.total.toFixed(3)} DT
@@ -331,15 +410,14 @@ export default function QuoteModal({ businessId, quote, onClose }: Props) {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <Field label="Notes" error={errors.notes?.message}>
             <textarea
               {...register('notes')}
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+              className={inputCls(errors.notes?.message)}
               placeholder="Notes additionnelles..."
             />
-          </div>
+          </Field>
 
           <div className="flex gap-3 pt-4">
             <button

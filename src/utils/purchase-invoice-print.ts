@@ -1,3 +1,6 @@
+// src/utils/purchase-invoice-print.ts
+// Template HTML professionnel pour les Factures Fournisseur (Purchase Invoices)
+
 import { INVOICE_STATUS_LABELS, InvoiceStatus, PurchaseInvoice } from '@/types';
 import { fmtAmt, fmtDate, printDocument, r3 } from './print-pdf.utils';
  
@@ -5,17 +8,17 @@ const INV_STATUS_CLASS: Record<InvoiceStatus, string> = {
   [InvoiceStatus.PENDING]:        'status-pending',
   [InvoiceStatus.APPROVED]:       'status-approved',
   [InvoiceStatus.PARTIALLY_PAID]: 'status-partial',
-  [InvoiceStatus.PAID]:           'status-received',
+  [InvoiceStatus.PAID]:           'status-paid',
   [InvoiceStatus.OVERDUE]:        'status-overdue',
   [InvoiceStatus.DISPUTED]:       'status-disputed',
-  [InvoiceStatus.CANCELLED]:       'status-disputed',
-
+  [InvoiceStatus.CANCELLED]:      'status-cancelled',
 };
  
 export const printPurchaseInvoice = (
   invoice:      PurchaseInvoice,
   businessName: string,
   businessMF?:  string,
+  businessAddress?: string,
 ) => {
   const supplier   = invoice.supplier;
   const now        = new Date().toLocaleDateString('fr-FR');
@@ -30,13 +33,18 @@ export const printPurchaseInvoice = (
     : 0;
  
   const html = `
+    <!-- EN-TÊTE AVEC LOGO -->
     <div class="doc-header">
-      <div>
-        <div class="company-name">${businessName.toUpperCase()}</div>
-        ${businessMF ? `<div class="company-sub">MF : ${businessMF}</div>` : ''}
+      <div style="display:flex; align-items:center; gap:12pt;">
+        <img src="/logo.png" alt="Logo" style="width:40pt; height:40pt; border-radius:8pt; flex-shrink:0; display:block;" />
+        <div>
+          <div class="company-name">${businessName.toUpperCase()}</div>
+          ${businessMF ? `<div class="company-sub">MF : ${businessMF}</div>` : ''}
+          ${businessAddress ? `<div class="company-sub">${businessAddress}</div>` : ''}
+        </div>
       </div>
       <div class="doc-info">
-        <div class="doc-type">Facture fournisseur</div>
+        <div class="doc-type">Facture Fournisseur</div>
         <div class="doc-number">${invoice.invoice_number_supplier}</div>
         <div class="doc-date">Émise le ${fmtDate(invoice.invoice_date)}</div>
         <div class="doc-date" style="${isOverdue ? 'color:#fca5a5;' : ''}">
@@ -47,12 +55,12 @@ export const printPurchaseInvoice = (
     </div>
     <div class="header-accent"></div>
  
+    <!-- STATUT -->
     <span class="status-badge ${INV_STATUS_CLASS[invoice.status]}">${INVOICE_STATUS_LABELS[invoice.status]}</span>
  
     ${isOverdue ? `
-      <div class="info-box danger" style="margin-bottom:10pt;">
-        <div class="info-title">⚠ Facture en retard de paiement</div>
-        L'échéance du ${fmtDate(invoice.due_date)} est dépassée. Reste à payer : ${fmtAmt(remaining)}.
+      <div class="alert-banner">
+        ⚠ Cette facture est en retard de paiement depuis le ${fmtDate(invoice.due_date)}. Reste à payer : ${fmtAmt(remaining)}
       </div>
     ` : ''}
     ${isDisputed ? `
@@ -62,6 +70,7 @@ export const printPurchaseInvoice = (
       </div>
     ` : ''}
  
+    <!-- PARTIES -->
     <div class="parties-grid">
       <div class="party-block">
         <div class="party-label">Fournisseur</div>
@@ -77,6 +86,7 @@ export const printPurchaseInvoice = (
         <div class="party-label">Facturé à</div>
         <div class="party-name">${businessName}</div>
         ${businessMF ? `<div class="party-line"><strong>MF :</strong> ${businessMF}</div>` : ''}
+        ${businessAddress ? `<div class="party-line">${businessAddress}</div>` : ''}
         <div class="party-line"><strong>N° facture :</strong> ${invoice.invoice_number_supplier}</div>
         <div class="party-line"><strong>Date facture :</strong> ${fmtDate(invoice.invoice_date)}</div>
         <div class="party-line"><strong>Échéance :</strong> ${fmtDate(invoice.due_date)}</div>
@@ -85,6 +95,7 @@ export const printPurchaseInvoice = (
       </div>
     </div>
  
+    <!-- DÉTAIL DES MONTANTS -->
     <div class="section-title"><span>Détail des montants</span></div>
     <table>
       <thead>
@@ -114,6 +125,7 @@ export const printPurchaseInvoice = (
       </tbody>
     </table>
  
+    <!-- TOTAUX -->
     <div class="totals-wrapper">
       <div class="totals-box">
         <div class="totals-row">
@@ -159,12 +171,30 @@ export const printPurchaseInvoice = (
       </div>
     ` : ''}
  
+    <!-- CONDITIONS DE PAIEMENT -->
     <div class="info-box" style="margin-top:14pt;">
       <div class="info-title">Conditions de paiement</div>
       Paiement à effectuer dans un délai de <strong>${supplier?.payment_terms ?? 30} jours</strong> à compter de la date de réception de la facture.
       ${supplier?.rib ? `<br>RIB : <strong>${supplier.rib}</strong>${supplier.bank_name ? ` — ${supplier.bank_name}` : ''}` : ''}
     </div>
+
+    <!-- SIGNATURES -->
+    <div class="signatures">
+      <div class="sig-box">
+        <div class="sig-label">Pour le fournisseur</div>
+        <div class="sig-name">${supplier?.name ?? '—'}</div>
+        <div class="sig-line"></div>
+        <div style="font-size:7.5pt; color:#94a3b8; margin-top:3pt;">Signature et cachet</div>
+      </div>
+      <div class="sig-box">
+        <div class="sig-label">Acceptation entreprise</div>
+        <div class="sig-name">${businessName}</div>
+        <div class="sig-line"></div>
+        <div style="font-size:7.5pt; color:#94a3b8; margin-top:3pt;">Signature et cachet</div>
+      </div>
+    </div>
  
+    <!-- PIED DE PAGE -->
     <div class="doc-footer">
       <div class="footer-accent"></div>
       <span>NovaEntra — Gestion Fournisseurs & Achats</span>
@@ -175,4 +205,3 @@ export const printPurchaseInvoice = (
  
   printDocument(html, `FACT-${invoice.invoice_number_supplier}`);
 };
- 

@@ -1,0 +1,73 @@
+/* ============================================
+   Mode Lecture - Masquer uniquement la navigation
+   ============================================ */
+
+/* ═══════════════════════════════════════════
+   MASQUER LA SIDEBAR ET LE HEADER
+   ═══════════════════════════════════════════ */
+
+/* Masquer la sidebar en mode lecture */
+.reading-mode .sidebar-container,
+.reading-mode aside,
+.reading-mode [class*="sidebar"],
+.reading-mode .hidden.lg\:fixed,
+.reading-mode .lg\:flex.lg\:w-72 {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Masquer le header en mode lecture */
+.reading-mode header,
+.reading-mode .top-header,
+.reading-mode [class*="header"] {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* ═══════════════════════════════════════════
+   AJUSTER LE LAYOUT PRINCIPAL
+   ═══════════════════════════════════════════ */
+
+/* Retirer le padding gauche du main container */
+.reading-mode .lg\:pl-72,
+.reading-mode main {
+  padding-left: 0 !important;
+  margin-left: 0 !important;
+}
+
+/* ═══════════════════════════════════════════
+   BOUTON DE CONTRÔLE DU MODE LECTURE
+   ═══════════════════════════════════════════ */
+
+/* S'assurer que le bouton d'accessibilité reste visible */
+.reading-mode .accessibility-button,
+.reading-mode [class*="accessibility"] {
+  display: block !important;
+  visibility: visible !important;
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE - MODE LECTURE MOBILE
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .reading-mode .sidebar-container,
+  .reading-mode aside,
+  .reading-mode header,
+  .reading-mode .top-header {
+    display: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   IMPRESSION EN MODE LECTURE
+   ═══════════════════════════════════════════ */
+
+@media print {
+  .reading-mode .sidebar-container,
+  .reading-mode aside,
+  .reading-mode header,
+  .reading-mode .top-header {
+    display: none !important;
+  }
+}

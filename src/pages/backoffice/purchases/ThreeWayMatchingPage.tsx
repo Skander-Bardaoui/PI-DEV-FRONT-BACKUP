@@ -1,8 +1,8 @@
 // src/pages/backoffice/purchases/ThreeWayMatchingPage.tsx
 //
-// Page de rapprochement 3 voies avec analyse IA
+// Page de contrôle et validation des factures avec analyse IA
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   CheckCircle,
@@ -15,6 +15,7 @@ import {
   Sparkles,
   AlertCircle,
   ArrowRight,
+  Lock,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -24,6 +25,7 @@ import {
   useInvoiceMatch,
   useAllPendingMatches,
   useApplyMatch,
+  useContactSupplier,
 } from '@/hooks/useThreeWayMatching';
 import {
   useApprovePurchaseInvoice,
@@ -32,17 +34,27 @@ import {
 
 import ThreeWayMatchingAIPanel from '@/components/purchases/ThreeWayMatchingAIPanel';
 import { formatAmount } from '@/types';
+import { useAIAccess } from '@/hooks/useAIAccess';
 
 export default function ThreeWayMatchingPage() {
   const { user } = useAuth();
   const businessId = (user as any)?.business_id ?? '';
   const navigate = useNavigate();
   const { invoiceId } = useParams<{ invoiceId?: string }>();
+  const { hasAIAccess, loading: aiLoading } = useAIAccess();
 
   const [useAI, setUseAI] = useState(true);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(
     invoiceId || null
   );
+
+  // Redirect if user doesn't have AI access
+  useEffect(() => {
+    if (!aiLoading && !hasAIAccess) {
+      toast.error('Cette fonctionnalité nécessite le plan Premium');
+      navigate('/app/purchases/invoices');
+    }
+  }, [hasAIAccess, aiLoading, navigate]);
 
   // Hooks
   const { data: matchResult, isLoading: matchLoading } = useInvoiceMatch(
@@ -59,6 +71,40 @@ export default function ThreeWayMatchingPage() {
   const applyMatch = useApplyMatch(businessId, useAI);
   const approve = useApprovePurchaseInvoice(businessId);
   const dispute = useDisputePurchaseInvoice(businessId);
+  const contactSupplier = useContactSupplier(businessId, useAI);
+
+  // Show loading or access denied
+  if (aiLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (!hasAIAccess) {
+    return (
+      <div className="p-6">
+        <div className="max-w-2xl mx-auto mt-12 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-8 border-2 border-purple-200">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-purple-100 rounded-full">
+              <Lock className="h-8 w-8 text-purple-600" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Fonctionnalité Premium</h2>
+              <p className="text-gray-600">Le rapprochement automatique avec IA nécessite le plan Premium</p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/app/purchases/invoices')}
+            className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Retour aux factures
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Handlers
   const handleApprove = async () => {
@@ -85,7 +131,7 @@ export default function ThreeWayMatchingPage() {
     try {
       const disputeReason = matchResult.issues && matchResult.issues.length > 0 
         ? matchResult.issues.join(' | ') 
-        : 'Écarts détectés lors du rapprochement 3 voies';
+        : 'Différences détectées lors de la vérification de la facture';
       
       const aiExplanation = matchResult.ai_analysis?.explanation 
         ? ` | Analyse IA: ${matchResult.ai_analysis.explanation}` 
@@ -97,15 +143,32 @@ export default function ThreeWayMatchingPage() {
           dispute_reason: disputeReason + aiExplanation,
         },
       });
-      toast.success('🚨 Facture mise en litige');
+      toast.success('🚨 Problème signalé sur la facture');
       navigate('/app/purchases/invoices');
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erreur lors de la mise en litige');
+      toast.error(error.response?.data?.message || 'Erreur lors du signalement du problème');
     }
   };
 
-  const handleContactSupplier = () => {
-    toast.info('📧 Fonctionnalité de contact fournisseur à venir');
+  const handleContactSupplier = async () => {
+    if (!selectedInvoiceId || !matchResult) return;
+    
+    if (!matchResult.supplier_email) {
+      toast.error(`❌ Le fournisseur "${matchResult.supplier_name}" n'a pas d'email configuré`);
+      return;
+    }
+    
+    try {
+      const result = await contactSupplier.mutateAsync(selectedInvoiceId);
+      
+      if (result.success) {
+        toast.success(`✅ ${result.message}`);
+      } else {
+        toast.error(`❌ ${result.message}`);
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erreur lors de l\'envoi de l\'email');
+    }
   };
 
   const handleApplyAutoAction = async () => {
@@ -116,9 +179,9 @@ export default function ThreeWayMatchingPage() {
       if (result.can_auto_approve) {
         toast.success(`✅ Facture approuvée automatiquement`);
       } else if (result.should_auto_dispute) {
-        toast.warning(`🚨 Facture mise en litige automatiquement`);
+        toast.warning(`🚨 Problème signalé automatiquement`);
       } else {
-        toast.info(`ℹ️ Revue manuelle requise`);
+        toast.info(`ℹ️ Vérification manuelle requise`);
       }
       
       navigate('/app/purchases/invoices');
@@ -136,7 +199,7 @@ export default function ThreeWayMatchingPage() {
   };
 
   const isLoading = matchLoading || allLoading;
-  const isProcessing = approve.isPending || dispute.isPending || applyMatch.isPending;
+  const isProcessing = approve.isPending || dispute.isPending || applyMatch.isPending || contactSupplier.isPending;
 
   return (
     <div className="space-y-6">
@@ -152,7 +215,7 @@ export default function ThreeWayMatchingPage() {
             </button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                Rapprochement 3 Voies
+                Vérification Factures
                 {useAI && (
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-indigo-600 text-white">
                     <Bot className="w-3 h-3 mr-1" />
@@ -161,7 +224,7 @@ export default function ThreeWayMatchingPage() {
                 )}
               </h1>
               <p className="text-sm text-gray-500 mt-1">
-                Vérification automatique BC ↔ BR ↔ Facture
+                Vérification automatique Commande ↔ Réception ↔ Facture
               </p>
             </div>
           </div>
@@ -184,15 +247,34 @@ export default function ThreeWayMatchingPage() {
           </div>
         </div>
 
-        {/* Banner info simplifié */}
+        {/* Banner info avec guide étape par étape */}
         {useAI && (
-          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-start gap-2">
-            <Bot className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm text-indigo-900 font-medium">Analyse IA activée</p>
-              <p className="text-xs text-indigo-700 mt-0.5">
-                L'IA Gemini analyse automatiquement les écarts et propose des recommandations.
-              </p>
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <Bot className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-indigo-900 mb-2">Comment fonctionne la vérification automatique ?</h3>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2 text-xs text-indigo-800">
+                    <span className="flex-shrink-0 w-5 h-5 bg-indigo-200 rounded-full flex items-center justify-center font-bold">1</span>
+                    <span>L'IA compare automatiquement la Commande, la Réception et la Facture</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-xs text-indigo-800">
+                    <span className="flex-shrink-0 w-5 h-5 bg-indigo-200 rounded-full flex items-center justify-center font-bold">2</span>
+                    <span>Elle détecte les différences de quantité, prix et montants</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-xs text-indigo-800">
+                    <span className="flex-shrink-0 w-5 h-5 bg-indigo-200 rounded-full flex items-center justify-center font-bold">3</span>
+                    <span>Elle propose une action : Approuver (si tout est OK), Signaler un problème (si différence importante), ou Contacter le fournisseur</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-xs text-indigo-800">
+                    <span className="flex-shrink-0 w-5 h-5 bg-indigo-200 rounded-full flex items-center justify-center font-bold">4</span>
+                    <span>Vous pouvez appliquer l'action recommandée en un clic ou choisir manuellement</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -204,7 +286,7 @@ export default function ThreeWayMatchingPage() {
           <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 border-b-2 border-gray-200">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <FileText className="w-5 h-5 text-indigo-600" />
-              Factures en Attente de Rapprochement
+              Factures en Attente de Vérification
               {useAI && (
                 <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">
                   IA disponible
@@ -244,7 +326,7 @@ export default function ThreeWayMatchingPage() {
                       </div>
                       <div className="flex items-center gap-3 text-xs text-gray-600">
                         <span>Montant: {formatAmount(match.invoiced_total)}</span>
-                        <span>Écart: {formatAmount(match.total_discrepancy)} ({match.discrepancy_pct.toFixed(2)}%)</span>
+                        <span>Différence: {formatAmount(match.total_discrepancy)} ({match.discrepancy_pct.toFixed(2)}%)</span>
                         <span className={`font-medium ${
                           match.status === 'MATCHED' ? 'text-green-600' :
                           match.status === 'MISMATCH' ? 'text-red-600' :
@@ -263,7 +345,7 @@ export default function ThreeWayMatchingPage() {
             <div className="p-12 text-center text-gray-500">
               <CheckCircle className="w-10 h-10 mx-auto mb-3 text-green-500" />
               <p className="font-medium text-sm">Aucune facture en attente</p>
-              <p className="text-xs mt-1">Toutes les factures ont été rapprochées</p>
+              <p className="text-xs mt-1">Toutes les factures ont été vérifiées</p>
             </div>
           )}
         </div>
@@ -297,28 +379,28 @@ export default function ThreeWayMatchingPage() {
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <div className="flex items-center gap-2 mb-2">
                   <FileText className="w-4 h-4 text-blue-600" />
-                  <span className="text-xs font-medium text-blue-900">Bon de Commande</span>
+                  <span className="text-xs font-medium text-blue-900">Commande</span>
                 </div>
                 <div className="text-xl font-bold text-blue-900">
                   {formatAmount(matchResult.po_total)}
                 </div>
                 <div className="text-xs text-blue-700 mt-1 truncate">
-                  {matchResult.po_number || 'Non associé'}
+                  {matchResult.po_number || 'Non associée'}
                 </div>
               </div>
 
               <div className="bg-green-50 rounded-lg p-3 border border-green-200">
                 <div className="flex items-center gap-2 mb-2">
                   <Package className="w-4 h-4 text-green-600" />
-                  <span className="text-xs font-medium text-green-900">Bon de Réception</span>
+                  <span className="text-xs font-medium text-green-900">Réception</span>
                 </div>
                 <div className="text-xl font-bold text-green-900">
                   {formatAmount(matchResult.received_total)}
                 </div>
                 <div className="text-xs text-green-700 mt-1">
                   {matchResult.gr_numbers.length > 0
-                    ? `${matchResult.gr_numbers.length} BR`
-                    : 'Aucun BR'}
+                    ? `${matchResult.gr_numbers.length} réception(s)`
+                    : 'Aucune réception'}
                 </div>
               </div>
 
@@ -357,7 +439,7 @@ export default function ThreeWayMatchingPage() {
                       ? 'text-red-900'
                       : 'text-orange-900'
                   }`}>
-                    Écart
+                    Différence
                   </span>
                 </div>
                 <div className={`text-xl font-bold ${
@@ -402,12 +484,12 @@ export default function ThreeWayMatchingPage() {
                   )}
                   <span className="text-sm font-semibold text-gray-900">
                     {matchResult.status === 'MATCHED' && '✅ VALIDÉ'}
-                    {matchResult.status === 'OVER_INVOICED' && '🚨 SURFACTURATION'}
-                    {matchResult.status === 'MISMATCH' && '⚠️ ÉCART'}
-                    {matchResult.status === 'MISSING_PO' && '❌ BC MANQUANT'}
-                    {matchResult.status === 'MISSING_GR' && '📦 BR MANQUANT'}
+                    {matchResult.status === 'OVER_INVOICED' && '🚨 TROP FACTURÉ'}
+                    {matchResult.status === 'MISMATCH' && '⚠️ DIFFÉRENCE'}
+                    {matchResult.status === 'MISSING_PO' && '❌ COMMANDE MANQUANTE'}
+                    {matchResult.status === 'MISSING_GR' && '📦 RÉCEPTION MANQUANTE'}
                     {matchResult.status === 'PARTIAL_MATCH' && 'ℹ️ PARTIEL'}
-                    {matchResult.status === 'UNDER_INVOICED' && '💰 SOUS-FACTURATION'}
+                    {matchResult.status === 'UNDER_INVOICED' && '💰 PAS ASSEZ FACTURÉ'}
                   </span>
                 </div>
                 
@@ -419,7 +501,7 @@ export default function ThreeWayMatchingPage() {
                   )}
                   {matchResult.should_auto_dispute && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">
-                      Litige requis
+                      Problème requis
                     </span>
                   )}
                 </div>
@@ -454,7 +536,7 @@ export default function ThreeWayMatchingPage() {
                       Description
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">
-                      Qté BC
+                      Qté Commandée
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">
                       Qté Reçue
@@ -463,13 +545,13 @@ export default function ThreeWayMatchingPage() {
                       Prix Unit.
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">
-                      Total BC
+                      Total Commandé
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">
                       Total Reçu
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">
-                      Écart
+                      Différence
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase">
                       Statut
@@ -659,25 +741,112 @@ export default function ThreeWayMatchingPage() {
             </div>
           )}
 
-          {/* Action automatique IA - Style cohérent */}
+          {/* Action automatique IA avec explications claires */}
           {useAI && matchResult.ai_analysis && (
-            <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-              <div className="flex items-center gap-2 mb-3">
-                <Bot className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-bold text-gray-900 text-sm">Action Automatique IA</h3>
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border-2 border-indigo-200">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-indigo-100 rounded-lg">
+                  <Sparkles className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-lg">Action Recommandée par l'IA</h3>
+                  <p className="text-sm text-gray-600">Basée sur l'analyse complète de la facture</p>
+                </div>
               </div>
+
+              {/* Explication de l'action recommandée */}
+              <div className="bg-white rounded-lg p-4 mb-4 border border-indigo-100">
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-lg ${
+                    matchResult.can_auto_approve ? 'bg-green-100' :
+                    matchResult.should_auto_dispute ? 'bg-red-100' :
+                    'bg-orange-100'
+                  }`}>
+                    {matchResult.can_auto_approve ? (
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                    ) : matchResult.should_auto_dispute ? (
+                      <XCircle className="w-5 h-5 text-red-600" />
+                    ) : (
+                      <AlertTriangle className="w-5 h-5 text-orange-600" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-gray-900 mb-1">
+                      {matchResult.can_auto_approve && '✅ Approuver la facture'}
+                      {matchResult.should_auto_dispute && '🚨 Mettre en litige'}
+                      {!matchResult.can_auto_approve && !matchResult.should_auto_dispute && '📧 Contacter le fournisseur'}
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                      {matchResult.can_auto_approve && 'La facture correspond aux réceptions. Aucun écart significatif détecté.'}
+                      {matchResult.should_auto_dispute && 'Des écarts importants ont été détectés. Un litige doit être ouvert pour investigation.'}
+                      {!matchResult.can_auto_approve && !matchResult.should_auto_dispute && 'Des clarifications sont nécessaires. Contactez le fournisseur pour résoudre les écarts.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bouton d'action principal */}
               <button
                 onClick={handleApplyAutoAction}
                 disabled={isProcessing}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+                className={`w-full flex items-center justify-center gap-2 px-6 py-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-bold text-base shadow-lg ${
+                  matchResult.can_auto_approve
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : matchResult.should_auto_dispute
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-orange-600 hover:bg-orange-700 text-white'
+                }`}
               >
-                <Sparkles className="w-4 h-4" />
-                Appliquer l'Action Recommandée
-                <ArrowRight className="w-4 h-4" />
+                {isProcessing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                    Traitement en cours...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5" />
+                    Appliquer l'Action Recommandée
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
               </button>
-              <p className="text-xs text-gray-600 text-center mt-2">
-                L'IA appliquera automatiquement l'action la plus appropriée
+
+              <p className="text-xs text-center text-gray-500 mt-3">
+                {matchResult.can_auto_approve && 'La facture sera approuvée et pourra être payée'}
+                {matchResult.should_auto_dispute && 'Un litige sera créé automatiquement avec tous les détails'}
+                {!matchResult.can_auto_approve && !matchResult.should_auto_dispute && 'Un email sera préparé avec tous les détails des écarts'}
               </p>
+
+              {/* Actions alternatives */}
+              <div className="mt-4 pt-4 border-t border-indigo-200">
+                <p className="text-xs text-gray-600 mb-2 font-medium">Ou choisissez une action manuelle :</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleApprove}
+                    disabled={isProcessing}
+                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2 bg-white border-2 border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approuver
+                  </button>
+                  <button
+                    onClick={handleDispute}
+                    disabled={isProcessing}
+                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2 bg-white border-2 border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Litige
+                  </button>
+                  <button
+                    onClick={handleContactSupplier}
+                    disabled={isProcessing}
+                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-3 py-2 bg-white border-2 border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    Contacter
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

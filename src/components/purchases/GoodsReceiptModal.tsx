@@ -3,7 +3,7 @@ import { useMemo, useCallback } from 'react';
 import { useForm, useWatch }    from 'react-hook-form';
 import { zodResolver }          from '@hookform/resolvers/zod';
 import { X, PackageCheck }      from 'lucide-react';
-import { goodsReceiptSchema, GoodsReceiptFormValues } from '@/schemas/purchases.schemas';
+import { createGoodsReceiptSchema, GoodsReceiptFormValues } from '@/schemas/purchases.schemas';
 import { useCreateGoodsReceipt } from '@/hooks/useGoodsReceipts';
 import { useToast }              from '@/components/ui/Toast';
 import { CreateGoodsReceiptItemDto, SupplierPO, formatAmount, round3 } from '@/types';
@@ -25,11 +25,19 @@ export default function GoodsReceiptModal({ businessId, po, onClose }: Props) {
       Number(i.quantity_received) < Number(i.quantity_ordered)
     ), [items]);
 
+  // Créer le schéma avec la date du bon de commande
+  const goodsReceiptSchema = useMemo(() => 
+    createGoodsReceiptSchema(po.created_at?.split('T')[0]), 
+    [po.created_at]
+  );
+
   const {
-    register, handleSubmit, setValue, control,
+    register, handleSubmit, setValue, control, trigger,
     formState: { errors, isSubmitting },
   } = useForm<GoodsReceiptFormValues>({
     resolver: zodResolver(goodsReceiptSchema),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: {
       receipt_date: new Date().toISOString().split('T')[0],
       notes:        '',
@@ -96,6 +104,22 @@ export default function GoodsReceiptModal({ businessId, po, onClose }: Props) {
     }
   };
 
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const isValid = await trigger();
+    if (!isValid) {
+      const firstErrorField = Object.keys(errors)[0];
+      if (firstErrorField) {
+        const element = document.querySelector(`[name="${firstErrorField}"]`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    } else {
+      handleSubmit(onSubmit)();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -113,7 +137,24 @@ export default function GoodsReceiptModal({ businessId, po, onClose }: Props) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="h-6 w-6" /></button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="p-6 space-y-5">
+        <form onSubmit={handleFormSubmit} noValidate className="p-6 space-y-5">
+
+          {/* Message d'erreur global */}
+          {Object.keys(errors).length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-red-800 mb-1">Erreurs de validation</h3>
+                  <p className="text-sm text-red-700">Veuillez corriger les erreurs ci-dessous avant de continuer.</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {errors.items?.root && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
@@ -126,9 +167,19 @@ export default function GoodsReceiptModal({ businessId, po, onClose }: Props) {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Date de réception <span className="text-red-500">*</span>
               </label>
-              <input type="date" {...register('receipt_date')}
-                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm ${errors.receipt_date ? 'border-red-400 bg-red-50' : 'border-gray-300'}`} />
+              <input 
+                type="date" 
+                {...register('receipt_date')}
+                min={po.created_at?.split('T')[0]}
+                max={new Date().toISOString().split('T')[0]}
+                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm ${errors.receipt_date ? 'border-red-400 bg-red-50' : 'border-gray-300'}`} 
+              />
               {errors.receipt_date && <p className="text-red-500 text-xs mt-1">{errors.receipt_date.message}</p>}
+              {po.created_at && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Date minimale : {new Date(po.created_at).toLocaleDateString('fr-FR')} (date du BC)
+                </p>
+              )}
             </div>
           </div>
 

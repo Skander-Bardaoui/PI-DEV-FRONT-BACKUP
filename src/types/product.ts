@@ -1,9 +1,16 @@
 import { Category } from './category';
+import { Warehouse } from './warehouse';
+
+export enum ProductType {
+  PHYSICAL = 'PHYSICAL',
+  SERVICE = 'SERVICE',
+  DIGITAL = 'DIGITAL',
+}
 
 export interface StockProduct {
   sku: string;
   price: any;
-  cost: import("react/jsx-runtime").JSX.Element;
+  cost: any;
   quantity: any;
   minQuantity: any;
   isActive: any;
@@ -14,6 +21,8 @@ export interface StockProduct {
   description: string | null;
   category_id: string | null;
   category?: Category;
+  warehouse_id?: string | null;
+  warehouse?: Warehouse;
   unit: string;
   sale_price_ht: number;
   purchase_price_ht: number;
@@ -23,11 +32,14 @@ export interface StockProduct {
   is_stockable: boolean;
   is_active: boolean;
   barcode: string | null;
+  type: ProductType;
+  // ==================== Product image ====================
+  image_url: string | null;
+  // ======================================================
   created_at: string;
   updated_at: string;
 }
 
-// Keep Product as alias for backward compatibility
 export type Product = StockProduct;
 
 export interface CreateProductDto {
@@ -35,6 +47,7 @@ export interface CreateProductDto {
   reference: string;
   description?: string;
   category_id?: string;
+  warehouse_id?: string;
   unit?: string;
   sale_price_ht?: number;
   purchase_price_ht?: number;
@@ -43,6 +56,10 @@ export interface CreateProductDto {
   min_stock_threshold?: number;
   is_stockable?: boolean;
   barcode?: string;
+  type?: ProductType;
+  // ==================== Product image ====================
+  image_url?: string;
+  // ======================================================
 }
 
 export interface UpdateProductDto {
@@ -50,6 +67,7 @@ export interface UpdateProductDto {
   reference?: string;
   description?: string;
   category_id?: string;
+  warehouse_id?: string;
   unit?: string;
   sale_price_ht?: number;
   purchase_price_ht?: number;
@@ -59,6 +77,10 @@ export interface UpdateProductDto {
   is_stockable?: boolean;
   is_active?: boolean;
   barcode?: string;
+  type?: ProductType;
+  // ==================== Product image ====================
+  image_url?: string;
+  // ======================================================
 }
 
 export interface QueryProductsDto {
@@ -66,4 +88,5 @@ export interface QueryProductsDto {
   category_id?: string;
   is_active?: boolean;
   low_stock?: boolean;
+  type?: ProductType;
 }

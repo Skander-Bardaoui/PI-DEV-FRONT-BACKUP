@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import ImageCropModal from '../../components/profile/ImageCropModal';
 import imageCompression from 'browser-image-compression';
 import { getMyTenant, updateMyTenant, uploadTenantLogo } from '../../api/tenant.api';
+import { getAssetUrl } from '@/config/api.config';
 
 export default function TenantSettings() {
   const [isLoading, setIsLoading] = useState(false);
@@ -134,7 +135,7 @@ export default function TenantSettings() {
             <div className="relative h-24 w-24 rounded-xl overflow-hidden bg-gradient-to-br from-indigo-100 to-purple-100 border-2 border-gray-200">
               {tenant?.logoUrl ? (
                 <img
-                  src={`http://localhost:3001${tenant.logoUrl}`}
+                  src={getAssetUrl(tenant.logoUrl)}
                   alt="Logo"
                   className="h-full w-full object-contain p-2"
                 />

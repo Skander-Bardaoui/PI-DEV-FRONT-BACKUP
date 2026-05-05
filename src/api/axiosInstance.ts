@@ -3,18 +3,24 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 // ─── Base Configuration ──────────────────────────────────────────────────
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:3001', // Your NestJS backend
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001', // Your NestJS backend
   headers: {
     'Content-Type': 'application/json',
   },
   withCredentials: true, // Enable sending cookies with requests
 });
 
-// ─── Request Interceptor: No longer needed for token attachment ──────────
-// Cookies are sent automatically with withCredentials: true
+// ─── Request Interceptor: Log requests for debugging ──────────
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // Cookies are automatically sent, no manual token attachment needed
+    // Log requests to three-way-matching for debugging
+    if (config.url?.includes('three-way-matching')) {
+      console.log('🔍 Three-way-matching request:', {
+        url: config.url,
+        method: config.method,
+        withCredentials: config.withCredentials,
+      });
+    }
     return config;
   },
   (error) => {
@@ -50,6 +56,11 @@ axiosInstance.interceptors.response.use(
 
     // If error is 401 and we haven't retried yet
     if (error.response?.status === 401 && !originalRequest._retry) {
+      console.warn('⚠️ 401 Unauthorized:', {
+        url: originalRequest.url,
+        hasRetried: originalRequest._retry,
+      });
+      
       // Don't retry login/register/refresh/me endpoints during initial auth
       if (
         originalRequest.url?.includes('/auth/login') ||
@@ -79,7 +90,7 @@ axiosInstance.interceptors.response.use(
       try {
         // Call refresh endpoint - cookies are sent automatically
         await axios.post(
-          'http://localhost:3001/auth/refresh',
+          `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/auth/refresh`,
           {},
           { withCredentials: true }
         );
@@ -92,9 +103,21 @@ axiosInstance.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError as Error);
         
+        // Check if it's a network error vs auth error
+        const isNetworkError = !refreshError || !(refreshError as any).response;
+        
+        if (isNetworkError) {
+          console.error('Network error during token refresh');
+          // Don't logout on network errors, let the user retry
+          return Promise.reject(new Error('Network error. Please check your connection.'));
+        }
+        
         // Refresh failed → redirect to login only if not already on auth pages
         if (!window.location.pathname.includes('/login') && 
             !window.location.pathname.includes('/register')) {
+          console.warn('Session expired, redirecting to login');
+          // Clear any stored data
+          localStorage.removeItem('currentBusinessId');
           window.location.href = '/login';
         }
         
@@ -102,6 +125,11 @@ axiosInstance.interceptors.response.use(
       } finally {
         isRefreshing = false;
       }
+    }
+
+    // Log other errors for debugging
+    if (error.response?.status && error.response.status >= 500) {
+      console.error('Server error:', error.response.status, originalRequest.url);
     }
 
     return Promise.reject(error);

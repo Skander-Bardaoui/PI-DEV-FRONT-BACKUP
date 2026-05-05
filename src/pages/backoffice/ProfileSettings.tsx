@@ -6,6 +6,7 @@ import { getMyProfile, updateProfile, uploadAvatar, changePassword } from '../..
 import ImageCropModal from '../../components/profile/ImageCropModal';
 import imageCompression from 'browser-image-compression';
 import { toast } from 'sonner';
+import { getAssetUrl } from '@/config/api.config';
 
 export default function ProfileSettings() {
   const { user, refreshUser } = useAuth();
@@ -238,7 +239,7 @@ export default function ProfileSettings() {
             <div className="relative h-32 w-32 rounded-full overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-600">
               {avatarUrl ? (
                 <img
-                  src={`http://localhost:3001${avatarUrl}`}
+                  src={getAssetUrl(avatarUrl)}
                   alt="Profile"
                   className="h-full w-full object-cover"
                 />

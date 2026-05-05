@@ -54,6 +54,11 @@ export interface Transaction {
   is_reconciled: boolean;
   created_by: string;
   created_at: string;
+  // Add these to your existing Transaction interface/type
+    fraud_score?:    number | null;
+    is_fraud?:       boolean;
+    fraud_blocked?:  boolean;
+    fraud_reviewed?: boolean;
 }
 
 // ===================== TRANSFERS =====================

@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Plus, Eye, ChevronUp, ChevronDown, Filter, Search, FileText, Trash2, Mail, Edit, Play, Truck, XCircle, MoreVertical } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Eye, ChevronUp, ChevronDown, Filter, Search, FileText, Trash2, Mail, Edit, Play, Truck, XCircle, Package, Clock, CheckCircle, TrendingUp } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useCurrentBusinessMember } from '../../../hooks/useCurrentBusinessMember';
 import { useSalesOrders, useDeleteSalesOrder, useStartProgressSalesOrder, useMarkDeliveredSalesOrder, useConvertSalesOrderToInvoice, useCancelSalesOrder, useSendSalesOrderEmail } from '@/hooks/useSalesOrders';
 import { SALES_ORDER_STATUS_COLORS, SALES_ORDER_STATUS_LABELS, SalesOrderStatus } from '@/types/sales-order';
 import SalesOrderModal from '@/components/sales/SalesOrderModal';
@@ -19,10 +20,22 @@ const STATUS_OPTIONS = [
   { value: 'CANCELLED', label: 'Annulé' },
 ];
 
+const LIMIT = 20;
+
 export default function SalesOrdersPage() {
   const { user } = useAuth();
   const businessId = (user as any)?.business_id ?? '';
+  const { businessMember: currentMember } = useCurrentBusinessMember();
   const toast = useToast();
+
+  // Permission checks
+  const currentUserRole = (user as any)?.role;
+  const isOwner = currentUserRole === 'BUSINESS_OWNER';
+  const sales = currentMember?.sales_permissions;
+
+  const canCreateOrder = isOwner || sales?.create_order === true;
+  const canUpdateOrder = isOwner || sales?.update_order === true;
+  const canCancelOrder = isOwner || sales?.cancel_order === true;
 
   const [statusFilter, setStatusFilter] = useState('');
   const [clientFilter, setClientFilter] = useState('');
@@ -41,13 +54,35 @@ export default function SalesOrdersPage() {
     status: statusFilter || undefined,
     client_id: clientFilter || undefined,
     page,
-    limit: 20,
+    limit: LIMIT,
   });
 
   const deleteOrder = useDeleteSalesOrder(businessId);
   const startProgress = useStartProgressSalesOrder(businessId);
   const markDelivered = useMarkDeliveredSalesOrder(businessId);
   const convertToInvoice = useConvertSalesOrderToInvoice(businessId);
+
+  const totalPages = data?.total_pages ?? 1;
+  const total = data?.total ?? 0;
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const orders = data?.data || [];
+    return {
+      total: total,
+      confirmed: orders.filter(o => o.status === 'CONFIRMED').length,
+      inProgress: orders.filter(o => o.status === 'IN_PROGRESS').length,
+      delivered: orders.filter(o => o.status === 'DELIVERED').length,
+      totalAmount: orders.reduce((sum, o) => sum + Number(o.netAmount || 0), 0),
+    };
+  }, [data, total]);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (page <= 3) return [1, 2, 3, 4, 5];
+    if (page >= totalPages - 2) return [totalPages-4, totalPages-3, totalPages-2, totalPages-1, totalPages];
+    return [page-2, page-1, page, page+1, page+2];
+  };
   const cancel = useCancelSalesOrder(businessId);
   const sendEmail = useSendSalesOrderEmail(businessId);
 
@@ -56,10 +91,14 @@ export default function SalesOrdersPage() {
     else { setSortField(field); setSortDir('asc'); }
   };
 
-  const SortIcon = ({ field }: { field: SortField }) =>
-    sortField === field
-      ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3 inline ml-1" /> : <ChevronDown className="h-3 w-3 inline ml-1" />)
-      : <span className="h-3 w-3 inline ml-1 opacity-30">↕</span>;
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField === field) {
+      return sortDir === 'asc' 
+        ? <ChevronUp className="h-3 w-3 inline ml-1" /> 
+        : <ChevronDown className="h-3 w-3 inline ml-1" />;
+    }
+    return <span className="h-3 w-3 inline ml-1 opacity-30">↕</span>;
+  };
 
   // Filter and search
   const filtered = (data?.data ?? []).filter(order => {
@@ -93,16 +132,69 @@ export default function SalesOrdersPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Commandes clients</h1>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
-        >
-          <Plus className="h-5 w-5" />
-          Nouvelle commande
-        </button>
+        {canCreateOrder && (
+          <button
+            onClick={() => setModalOpen(true)}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="h-5 w-5" />
+            Nouvelle commande
+          </button>
+        )}
+      </div>
+
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-blue-50 rounded-lg border border-blue-100 p-5 hover:shadow-sm transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-700 text-sm font-medium">Total Commandes</p>
+              <p className="text-3xl font-bold text-blue-900 mt-2">{stats.total}</p>
+            </div>
+            <div className="bg-blue-100 p-3 rounded-lg">
+              <Package className="h-7 w-7 text-blue-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-orange-50 rounded-lg border border-orange-100 p-5 hover:shadow-sm transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-orange-700 text-sm font-medium">En Cours</p>
+              <p className="text-3xl font-bold text-orange-900 mt-2">{stats.inProgress}</p>
+            </div>
+            <div className="bg-orange-100 p-3 rounded-lg">
+              <Clock className="h-7 w-7 text-orange-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-green-50 rounded-lg border border-green-100 p-5 hover:shadow-sm transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-700 text-sm font-medium">Livrées</p>
+              <p className="text-3xl font-bold text-green-900 mt-2">{stats.delivered}</p>
+            </div>
+            <div className="bg-green-100 p-3 rounded-lg">
+              <CheckCircle className="h-7 w-7 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-purple-50 rounded-lg border border-purple-100 p-5 hover:shadow-sm transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-purple-700 text-sm font-medium">Montant Total</p>
+              <p className="text-2xl font-bold text-purple-900 mt-2">{formatAmount(stats.totalAmount)} DT</p>
+            </div>
+            <div className="bg-purple-100 p-3 rounded-lg">
+              <TrendingUp className="h-7 w-7 text-purple-600" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow">
@@ -243,32 +335,36 @@ export default function SalesOrdersPage() {
                         
                         {order.status === SalesOrderStatus.CONFIRMED && (
                           <>
-                            <button
-                              onClick={() => setEditingOrder(order)}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Modifier"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await startProgress.mutateAsync(order.id);
-                                  toast.success('Commande démarrée', 'Un bon de livraison a été créé automatiquement');
-                                } catch (error: any) {
-                                  toast.error('Erreur', error?.response?.data?.message || 'Erreur lors du démarrage');
-                                }
-                              }}
-                              disabled={startProgress.isPending}
-                              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
-                              title="Démarrer"
-                            >
-                              <Play className="h-4 w-4" />
-                            </button>
+                            {canUpdateOrder && (
+                              <button
+                                onClick={() => setEditingOrder(order)}
+                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Modifier"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canUpdateOrder && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await startProgress.mutateAsync(order.id);
+                                    toast.success('Commande démarrée', 'Un bon de livraison a été créé automatiquement');
+                                  } catch (error: any) {
+                                    toast.error('Erreur', error?.response?.data?.message || 'Erreur lors du démarrage');
+                                  }
+                                }}
+                                disabled={startProgress.isPending}
+                                className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                                title="Démarrer"
+                              >
+                                <Play className="h-4 w-4" />
+                              </button>
+                            )}
                           </>
                         )}
                         
-                        {order.status === SalesOrderStatus.IN_PROGRESS && (
+                        {order.status === SalesOrderStatus.IN_PROGRESS && canUpdateOrder && (
                           <button
                             onClick={async () => {
                               try {
@@ -304,7 +400,7 @@ export default function SalesOrdersPage() {
                           </button>
                         )}
                         
-                        {[SalesOrderStatus.CONFIRMED, SalesOrderStatus.IN_PROGRESS].includes(order.status) && (
+                        {[SalesOrderStatus.CONFIRMED, SalesOrderStatus.IN_PROGRESS].includes(order.status) && canCancelOrder && (
                           <button
                             onClick={async () => {
                               if (confirm('Êtes-vous sûr de vouloir annuler cette commande ?')) {
@@ -324,7 +420,7 @@ export default function SalesOrdersPage() {
                           </button>
                         )}
                         
-                        {(order.status === SalesOrderStatus.CONFIRMED || order.status === SalesOrderStatus.INVOICED) && (
+                        {(order.status === SalesOrderStatus.CONFIRMED || order.status === SalesOrderStatus.INVOICED) && canCancelOrder && (
                           <button
                             onClick={() => {
                               if (confirm('Êtes-vous sûr de vouloir supprimer cette commande ?')) {
@@ -345,6 +441,42 @@ export default function SalesOrdersPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination */}
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between flex-wrap gap-3">
+          <p className="text-sm text-gray-500">
+            {total === 0
+              ? 'Aucun résultat'
+              : `${(page - 1) * LIMIT + 1}–${Math.min(page * LIMIT, total)} sur ${total} commande${total > 1 ? 's' : ''}`
+            }
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(1)} disabled={page === 1}
+              className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs disabled:opacity-40 hover:bg-gray-50 transition-colors">
+              «
+            </button>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors">
+              Précédent
+            </button>
+            {getPageNumbers().map(n => (
+              <button key={n} onClick={() => setPage(n)}
+                className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                  page === n ? 'bg-indigo-600 text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}>
+                {n}
+              </button>
+            ))}
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors">
+              Suivant
+            </button>
+            <button onClick={() => setPage(totalPages)} disabled={page >= totalPages}
+              className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs disabled:opacity-40 hover:bg-gray-50 transition-colors">
+              »
+            </button>
+          </div>
         </div>
       </div>
 

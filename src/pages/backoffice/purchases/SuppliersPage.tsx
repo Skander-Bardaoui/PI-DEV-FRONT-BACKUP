@@ -8,6 +8,7 @@ import {
   Brain,
 } from 'lucide-react';
 import { useAuth }             from '../../../hooks/useAuth';
+import { useCurrentBusinessMember } from '@/hooks/useCurrentBusinessMember';
 import {
   useSuppliers,
   useArchiveSupplier,
@@ -21,8 +22,12 @@ import SupplierInviteModal     from '@/components/purchases/SupplierInviteModal'
 import SupplierScoreModal      from '@/components/purchases/SupplierScoreModal';
 import SupplierAIInsightsModal from '@/components/purchases/SupplierAIInsightsModal';
 import PDFButton               from '@/components/purchases/PDFButton';
-import { formatDate, Supplier } from '@/types';
+import { Supplier } from '@/types';
 import SupplierScoreBadge from './SupplierScoreBadge';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { EmptyState } from '@/components/common/EmptyState';
+import { formatDate } from '@/utils/formatters';
+import { isNonEmptyArray } from '@/utils/validators';
 
 type SortField = 'name' | 'payment_terms' | 'category' | 'created_at';
 type SortDir   = 'asc' | 'desc';
@@ -42,6 +47,17 @@ export default function SuppliersPage() {
   const { user }   = useAuth();
   const businessId = (user as any)?.business_id ?? '';
   const navigate   = useNavigate();
+  const { businessMember: currentMember } = useCurrentBusinessMember();
+
+  // Permission checks
+  const currentUserRole = (user as any)?.role;
+  const isOwner = currentUserRole === 'BUSINESS_OWNER';
+  const purchases = currentMember?.purchase_permissions;
+  
+  const canCreateSupplier = isOwner || purchases?.create_supplier === true;
+  const canUpdateSupplier = isOwner || purchases?.update_supplier === true;
+  const canDeleteSupplier = isOwner || purchases?.delete_supplier === true;
+  const canInviteSupplier = isOwner || purchases?.invite_supplier === true;
 
   const [search,         setSearch]         = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -76,26 +92,32 @@ export default function SuppliersPage() {
   const openEdit   = (s: Supplier) => { setSelected(s); setModalOpen(true); };
   const openDetail = (s: Supplier) => { setDetailSupplier(s); setDetailOpen(true); };
 
-  const sorted = [...(data?.data ?? [])].sort((a, b) => {
-    let va: any, vb: any;
-    if      (sortField === 'payment_terms') { va = Number(a.payment_terms); vb = Number(b.payment_terms); }
-    else if (sortField === 'category')      { va = a.category ?? ''; vb = b.category ?? ''; }
-    else if (sortField === 'created_at')    { va = a.created_at; vb = b.created_at; }
-    else { va = a.name.toLowerCase(); vb = b.name.toLowerCase(); }
-    if (va < vb) return sortDir === 'asc' ? -1 : 1;
-    if (va > vb) return sortDir === 'asc' ?  1 : -1;
-    return 0;
-  });
+  const sorted = isNonEmptyArray(data?.data) 
+    ? [...data.data].sort((a, b) => {
+        let va: any, vb: any;
+        if      (sortField === 'payment_terms') { va = Number(a.payment_terms ?? 0); vb = Number(b.payment_terms ?? 0); }
+        else if (sortField === 'category')      { va = a.category ?? ''; vb = b.category ?? ''; }
+        else if (sortField === 'created_at')    { va = a.created_at ?? ''; vb = b.created_at ?? ''; }
+        else { va = (a.name ?? '').toLowerCase(); vb = (b.name ?? '').toLowerCase(); }
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ?  1 : -1;
+        return 0;
+      })
+    : [];
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
   };
 
-  const SortIcon = ({ field }: { field: SortField }) =>
-    sortField === field
-      ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3 inline ml-1" /> : <ChevronDown className="h-3 w-3 inline ml-1" />)
-      : <span className="h-3 w-3 inline ml-1 opacity-30">↕</span>;
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField === field) {
+      return sortDir === 'asc' 
+        ? <ChevronUp className="h-3 w-3 inline ml-1" /> 
+        : <ChevronDown className="h-3 w-3 inline ml-1" />;
+    }
+    return <span className="h-3 w-3 inline ml-1 opacity-30">↕</span>;
+  };
 
   const hasActiveFilters = search || categoryFilter || showInactive;
   const clearFilters = () => { setSearch(''); setCategoryFilter(''); setShowInactive(false); setPage(1); };
@@ -118,28 +140,46 @@ export default function SuppliersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Fournisseurs</h1>
           <p className="text-gray-500 text-sm">{total} fournisseur(s) au total</p>
         </div>
-        <div className="flex gap-2">
-        <button onClick={() => navigate('/app/purchases/supplier-intelligence')}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-purple-300 bg-purple-50 text-purple-700 rounded-lg text-sm hover:bg-purple-100">
-            <Brain className="h-4 w-4" /> Intelligence IA
-          </button>
+        <div className="flex flex-wrap gap-2">
+          {/* Bouton principal */}
+          {canCreateSupplier && (
+            <button onClick={openCreate}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
+              <Plus className="h-5 w-5" /> Nouveau fournisseur
+            </button>
+          )}
+          
+          {/* Actions secondaires */}
+          {canInviteSupplier && (
+            <button onClick={() => setInviteOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+              <UserPlus className="h-4 w-4" /> Inviter
+            </button>
+          )}
+          
           <button onClick={() => setShowFilters(f => !f)}
-            className={`inline-flex items-center gap-2 px-4 py-2 border rounded-lg text-sm transition-colors ${
-              hasActiveFilters ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+            className={`inline-flex items-center gap-2 px-4 py-2 bg-white border rounded-lg transition-colors shadow-sm ${
+              hasActiveFilters ? 'border-indigo-400 text-indigo-700 bg-indigo-50' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}>
             <Filter className="h-4 w-4" />
-            Filtres {hasActiveFilters && '(actifs)'}
-          </button>
-          <button onClick={() => setInviteOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-green-300 bg-green-50 text-green-700 rounded-lg text-sm hover:bg-green-100 transition-colors">
-            <UserPlus className="h-4 w-4" /> Inviter par email
-          </button>
-          <button onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-            <Plus className="h-5 w-5" /> Nouveau fournisseur
+            Filtres
           </button>
         </div>
       </div>
+
+      {/* Carte d'action IA */}
+      <button onClick={() => navigate('/app/purchases/supplier-intelligence')}
+        className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-4 hover:shadow-md transition-all text-left group w-full">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-indigo-100 rounded-lg group-hover:bg-indigo-200 transition-colors">
+            <Brain className="h-5 w-5 text-indigo-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-gray-900 mb-1">Évaluer la performance</h3>
+            <p className="text-sm text-gray-600">Analyse intelligente de vos fournisseurs</p>
+          </div>
+        </div>
+      </button>
 
       <div className="grid sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-4 border border-gray-200">
@@ -217,9 +257,13 @@ export default function SuppliersPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
-          </div>
+          <LoadingSpinner size="lg" message="Chargement des fournisseurs..." />
+        ) : !isNonEmptyArray(sorted) ? (
+          <EmptyState 
+            icon={<Building2 className="h-16 w-16 text-gray-400" />}
+            message="Aucun fournisseur trouvé"
+            action={!hasActiveFilters && canCreateSupplier ? { label: "Nouveau fournisseur", onClick: openCreate } : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -242,11 +286,7 @@ export default function SuppliersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {!sorted.length ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-12 text-gray-500">Aucun fournisseur trouvé</td>
-                  </tr>
-                ) : sorted.map(s => (
+                {sorted.map(s => (
                   <tr key={s.id} className={`hover:bg-gray-50 transition-colors ${!s.is_active ? 'opacity-60' : ''}`}>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -294,11 +334,15 @@ export default function SuppliersPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button onClick={() => openDetail(s)} title="Voir" className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Eye className="h-4 w-4" /></button>
                         <button onClick={() => setAiInsightsSupplier(s)} title="Analyse IA" className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Sparkles className="h-4 w-4" /></button>
-                        <button onClick={() => openEdit(s)} title="Modifier" className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit className="h-4 w-4" /></button>
-                        {s.is_active ? (
-                          <button onClick={() => archive.mutate(s.id)} disabled={archive.isPending} title="Archiver" className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="h-4 w-4" /></button>
-                        ) : (
-                          <button onClick={() => restore.mutate(s.id)} disabled={restore.isPending} title="Restaurer" className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"><RotateCcw className="h-4 w-4" /></button>
+                        {canUpdateSupplier && (
+                          <button onClick={() => openEdit(s)} title="Modifier" className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit className="h-4 w-4" /></button>
+                        )}
+                        {canDeleteSupplier && (
+                          s.is_active ? (
+                            <button onClick={() => archive.mutate(s.id)} disabled={archive.isPending} title="Archiver" className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="h-4 w-4" /></button>
+                          ) : (
+                            <button onClick={() => restore.mutate(s.id)} disabled={restore.isPending} title="Restaurer" className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"><RotateCcw className="h-4 w-4" /></button>
+                          )
                         )}
                       </div>
                     </td>
@@ -372,8 +416,10 @@ export default function SuppliersPage() {
               <div className="flex justify-between pt-2 border-t border-gray-100"><span className="text-gray-500">Créé le</span><span>{formatDate(detailSupplier.created_at)}</span></div>
             </div>
             <div className="mt-6 flex gap-3">
-              <button onClick={() => { setDetailOpen(false); openEdit(detailSupplier); }}
-                className="flex-1 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors">Modifier</button>
+              {canUpdateSupplier && (
+                <button onClick={() => { setDetailOpen(false); openEdit(detailSupplier); }}
+                  className="flex-1 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors">Modifier</button>
+              )}
               <button onClick={() => { setDetailOpen(false); setScoreSupplier(detailSupplier); }}
                 className="py-2 px-4 border border-purple-300 bg-purple-50 text-purple-700 rounded-xl hover:bg-purple-100 transition-colors inline-flex items-center gap-2 text-sm">
                 <Award className="h-4 w-4" /> Score

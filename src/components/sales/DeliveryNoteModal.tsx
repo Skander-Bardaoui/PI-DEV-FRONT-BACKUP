@@ -1,6 +1,8 @@
 // src/components/sales/DeliveryNoteModal.tsx
 import { useFieldArray, useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { X, Plus, Trash2 } from 'lucide-react';
+import { createDeliveryNoteSchema, DeliveryNoteFormValues } from '@/schemas/sales.schemas';
 import { useCreateDeliveryNote, useUpdateDeliveryNote } from '@/hooks/useDeliveryNotes';
 import { useClients } from '@/hooks/useClients';
 import { useSalesOrders } from '@/hooks/useSalesOrders';
@@ -9,19 +11,40 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ProductSelector from './ProductSelector';
 import { Product } from '@/types/product';
 
-interface DeliveryNoteFormValues {
-  clientId: string;
+// Extended form values to include salesOrderId for UI purposes
+type ExtendedDeliveryNoteFormValues = DeliveryNoteFormValues & {
   salesOrderId?: string;
-  deliveryDate?: string;
-  notes?: string;
-  items: {
-    productId?: string;
-    salesOrderItemId?: string;
-    description: string;
-    quantity: number;
-    deliveredQuantity: number;
-  }[];
-}
+};
+
+// ── Composant Field avec erreur ───────────────────────────────────────────────
+const Field = ({
+  label, error, required, children,
+}: { label: string; error?: string; required?: boolean; children: React.ReactNode }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {label} {required && <span className="text-red-500">*</span>}
+    </label>
+    {children}
+    {error && (
+      <div className="flex items-start gap-1.5 mt-1.5">
+        <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+        </svg>
+        <p className="text-red-600 text-xs font-medium">{error}</p>
+      </div>
+    )}
+  </div>
+);
+
+const inputCls = (error?: string) =>
+  `w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm transition-colors ${
+    error ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200' : 'border-gray-300'
+  }`;
+
+const inputSmallCls = (error?: string) =>
+  `w-full px-2 py-1 border rounded text-sm transition-colors ${
+    error ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200' : 'border-gray-200'
+  }`;
 
 interface Props {
   businessId: string;
@@ -36,6 +59,7 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
   const { data: ordersData } = useSalesOrders(businessId, { limit: 100 });
   const [error, setError] = useState<string | null>(null);
   const [itemStocks, setItemStocks] = useState<{ [key: number]: { stock: number; isStockable: boolean } }>({});
+  const [orderCreatedDate, setOrderCreatedDate] = useState<string | undefined>(undefined);
 
   const isEdit = !!note;
 
@@ -63,30 +87,25 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
   }, []);
 
   // Compute default values — stable, runs only once on mount
-  const defaultValues = useMemo((): DeliveryNoteFormValues => {
+  const defaultValues = useMemo((): ExtendedDeliveryNoteFormValues => {
     if (isEdit && note) {
       const uniqueItems = deduplicateItems(note.items ?? []);
       return {
-        clientId: note.clientId || '',
-        salesOrderId: note.salesOrderId || '',
-        deliveryDate: note.deliveryDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+        delivery_date: note.deliveryDate?.split('T')[0] || new Date().toISOString().split('T')[0],
         notes: note.notes || '',
+        salesOrderId: note.salesOrderId || '',
         items: uniqueItems.map((item: any) => ({
-          description: item.description,
-          quantity: Number(item.quantity),
-          deliveredQuantity: Number(item.deliveredQuantity),
-          productId: item.productId ?? undefined,
-          salesOrderItemId: item.salesOrderItemId ?? undefined,
+          sales_order_item_id: item.salesOrderItemId || item.id || '',
+          quantity_delivered: Number(item.deliveredQuantity || 0),
         })),
       };
     }
 
     return {
-      clientId: '',
-      salesOrderId: '',
-      deliveryDate: new Date().toISOString().split('T')[0],
+      delivery_date: new Date().toISOString().split('T')[0],
       notes: '',
-      items: [{ description: '', quantity: 1, deliveredQuantity: 1 }],
+      salesOrderId: '',
+      items: [{ sales_order_item_id: '', quantity_delivered: 0 }],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally empty — only compute once on mount
@@ -98,10 +117,11 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
     watch,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<DeliveryNoteFormValues>({
+  } = useForm<ExtendedDeliveryNoteFormValues>({
+    resolver: zodResolver(createDeliveryNoteSchema(orderCreatedDate)),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues,
-    mode: 'onChange',
-    shouldUnregister: false,
   });
 
   const { fields, append, remove, replace } = useFieldArray({
@@ -116,6 +136,7 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
   // ─── KEY FIX ────────────────────────────────────────────────────────────────
   // Only populate items from order in CREATE mode, and only once per order
   // selection (guarded by the ref). In EDIT mode this effect never runs.
+  // Also set the order created date for validation
   // ────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     // Never auto-populate in edit mode
@@ -126,19 +147,22 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
     if (orderItemsPopulated.current) return;
 
     const selectedOrder = ordersData.data.find((o: any) => o.id === watchedSalesOrderId);
-    if (selectedOrder?.items) {
-      const orderItems = selectedOrder.items.map((item: any) => ({
-        salesOrderItemId: item.id,
-        productId: item.productId,
-        description: item.description,
-        quantity: Number(item.quantity),
-        deliveredQuantity: Number(item.quantity),
-      }));
-      replace(orderItems);
-      setValue('clientId', selectedOrder.clientId);
-      orderItemsPopulated.current = true;
+    if (selectedOrder) {
+      // Set order created date for validation
+      if (selectedOrder.createdAt) {
+        setOrderCreatedDate(new Date(selectedOrder.createdAt).toISOString().split('T')[0]);
+      }
+      
+      if (selectedOrder.items) {
+        const orderItems = selectedOrder.items.map((item: any) => ({
+          sales_order_item_id: item.id,
+          quantity_delivered: Number(item.quantity),
+        }));
+        replace(orderItems);
+        orderItemsPopulated.current = true;
+      }
     }
-  }, [watchedSalesOrderId, ordersData, isEdit, replace, setValue]);
+  }, [watchedSalesOrderId, ordersData, isEdit, replace]);
 
   // Reset the guard when the user picks a different order (create mode)
   useEffect(() => {
@@ -149,15 +173,11 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
 
   const handleProductSelect = (index: number, product: Product | null) => {
     if (product) {
-      setValue(`items.${index}.productId`, product.id);
-      setValue(`items.${index}.description`, product.name);
       setItemStocks(prev => ({
         ...prev,
         [index]: { stock: product.current_stock || 0, isStockable: product.is_stockable }
       }));
     } else {
-      setValue(`items.${index}.productId`, undefined);
-      setValue(`items.${index}.description`, '');
       setItemStocks(prev => {
         const newStocks = { ...prev };
         delete newStocks[index];
@@ -170,16 +190,19 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
     const itemStock = itemStocks[index];
     if (!itemStock || !itemStock.isStockable) return null;
     
-    const quantity = Number(watchedItems[index]?.deliveredQuantity) || 0;
+    const quantity = Number(watchedItems[index]?.quantity_delivered) || 0;
     if (quantity > itemStock.stock) {
       return `Stock insuffisant ! Disponible: ${itemStock.stock}`;
     }
     return null;
   };
 
-  const onSubmit = async (values: DeliveryNoteFormValues) => {
+  const onSubmit = async (values: ExtendedDeliveryNoteFormValues) => {
     try {
       setError(null);
+      
+      console.log('=== Form values ===');
+      console.log('values.items:', values.items);
       
       // Validate stock for all items
       for (let i = 0; i < values.items.length; i++) {
@@ -190,21 +213,88 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
         }
       }
       
-      const items = values.items.map((item) => ({
-        description: item.description,
-        quantity: Number(item.quantity) || 0,
-        deliveredQuantity: Number(item.deliveredQuantity) || 0,
-        ...(item.productId ? { productId: item.productId } : {}),
-        ...(item.salesOrderItemId ? { salesOrderItemId: item.salesOrderItemId } : {}),
-      })) as CreateDeliveryNoteItemDto[];
+      // In edit mode, use the existing salesOrderId from the note
+      const salesOrderId = isEdit ? note.salesOrderId : values.salesOrderId;
+      
+      // Get the selected order to extract client and item details
+      const selectedOrder = ordersData?.data?.find((o: any) => o.id === salesOrderId);
+      if (!selectedOrder && !isEdit) {
+        setError('Commande introuvable');
+        return;
+      }
+      
+      console.log('=== Before mapping items ===');
+      console.log('isEdit:', isEdit);
+      console.log('note.items:', note?.items);
+      console.log('selectedOrder:', selectedOrder);
+      
+      const items = values.items
+        .filter(item => {
+          // Filter out items with invalid data
+          const qty = parseFloat(String(item.quantity_delivered || 0));
+          console.log('Filtering item:', item, 'qty:', qty);
+          return !isNaN(qty) && qty >= 0;
+        })
+        .map((item, index) => {
+          if (isEdit) {
+            // In edit mode, match by index since salesOrderItemId might not be stored
+            const existingItem = note.items?.[index];
+            
+            console.log(`Edit mode - item ${index}:`, {
+              formItem: item,
+              existingItem: existingItem
+            });
+            
+            // Use productId if available, otherwise null (for legacy data)
+            const productId = existingItem?.productId || null;
+            
+            const quantity = parseFloat(String(existingItem?.quantity || 1));
+            const deliveredQuantity = parseFloat(String(item.quantity_delivered || 0));
+            
+            return {
+              productId: productId, // Can be null for legacy data
+              description: existingItem?.description || 'Article',
+              quantity: isNaN(quantity) || quantity === 0 ? 1 : quantity,
+              deliveredQuantity: isNaN(deliveredQuantity) ? 0 : deliveredQuantity,
+            };
+          } else {
+            // In create mode, use order item data
+            const orderItem = selectedOrder?.items?.find((oi: any) => oi.id === item.sales_order_item_id);
+            
+            // Use productId if available, otherwise null
+            const productId = orderItem?.productId || null;
+            
+            const quantity = parseFloat(String(orderItem?.quantity || 0));
+            const deliveredQuantity = parseFloat(String(item.quantity_delivered || 0));
+            
+            return {
+              productId: productId, // Can be null for legacy data
+              description: orderItem?.description || '',
+              quantity: isNaN(quantity) ? 0 : quantity,
+              deliveredQuantity: isNaN(deliveredQuantity) ? 0 : deliveredQuantity,
+            };
+          }
+        }) as CreateDeliveryNoteItemDto[];
+      
+      // Validate that we have at least one item
+      if (items.length === 0) {
+        setError('Au moins une ligne avec une quantité livrée valide est requise');
+        return;
+      }
 
       const payload = {
-        clientId: values.clientId,
-        salesOrderId: values.salesOrderId || undefined,
-        deliveryDate: values.deliveryDate || undefined,
+        clientId: isEdit ? note.clientId : selectedOrder!.clientId,
+        ...(salesOrderId ? { salesOrderId } : {}),
+        deliveryDate: values.delivery_date || undefined,
         notes: values.notes || undefined,
         items,
       };
+
+      console.log('=== Delivery note payload ===');
+      console.log(JSON.stringify(payload, null, 2));
+      console.log('=== Items detail ===');
+      console.log('Items count:', items.length);
+      console.log('Items:', items);
 
       if (isEdit) {
         await update.mutateAsync(payload);
@@ -214,11 +304,32 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
       onClose();
     } catch (err: any) {
       console.error('❌ Erreur bon de livraison:', err);
-      setError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Erreur lors de l'opération",
-      );
+      console.error('Response data:', JSON.stringify(err?.response?.data, null, 2));
+      console.error('Response status:', err?.response?.status);
+      
+      // Extract detailed error message
+      let errorMessage = "Erreur lors de l'opération";
+      
+      if (err?.response?.data) {
+        const data = err.response.data;
+        if (typeof data === 'string') {
+          errorMessage = data;
+        } else if (data.message) {
+          if (Array.isArray(data.message)) {
+            errorMessage = data.message.join(', ');
+          } else {
+            errorMessage = data.message;
+          }
+        } else if (Array.isArray(data)) {
+          errorMessage = data.join(', ');
+        } else {
+          errorMessage = JSON.stringify(data);
+        }
+      } else if (err?.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     }
   };
 
@@ -244,14 +355,14 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Commande client
+                Commande client <span className="text-red-500">*</span>
               </label>
               <select
                 {...register('salesOrderId')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
                 disabled={isEdit}
               >
-                <option value="">Sélectionner une commande (optionnel)</option>
+                <option value="">Sélectionner une commande</option>
                 {ordersData?.data?.map((order: any) => (
                   <option key={order.id} value={order.id}>
                     {order.orderNumber} - {order.client?.name}
@@ -259,194 +370,141 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
                 ))}
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                Sélectionnez une commande pour lier automatiquement les articles
+                {isEdit ? 'Commande liée (non modifiable)' : 'Sélectionnez une commande pour créer le bon de livraison'}
               </p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Client <span className="text-red-500">*</span>
-              </label>
-              {watchedSalesOrderId || isEdit ? (
-                <>
-                  <input
-                    type="hidden"
-                    {...register('clientId', { required: 'Client requis' })}
-                  />
-                  <select
-                    value={watch('clientId')}
-                    disabled
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-gray-100 cursor-not-allowed"
-                  >
-                    <option value="">Sélectionner un client</option>
-                    {clientsData?.clients?.map((client: any) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Le client ne peut pas être modifié
-                  </p>
-                </>
-              ) : (
-                <>
-                  <select
-                    {...register('clientId', { required: 'Client requis' })}
-                    className={`w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 ${
-                      errors.clientId ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Sélectionner un client</option>
-                    {clientsData?.clients?.map((client: any) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.clientId && (
-                    <p className="text-red-500 text-xs mt-1">{errors.clientId.message}</p>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date de livraison
-              </label>
+            <Field label="Date de livraison" error={errors.delivery_date?.message} required>
               <input
                 type="date"
-                {...register('deliveryDate')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                {...register('delivery_date')}
+                className={inputCls(errors.delivery_date?.message)}
               />
-            </div>
+            </Field>
           </div>
 
           {/* Lignes */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <span className="font-medium text-gray-900">Articles livrés</span>
-                {watchedSalesOrderId && (
+          {(watchedSalesOrderId || isEdit) && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <span className="font-medium text-gray-900">Articles à livrer</span>
                   <p className="text-xs text-gray-500 mt-1">
-                    Articles liés à la commande — Modifiez les quantités livrées selon la
-                    livraison réelle
+                    Modifiez les quantités livrées selon la livraison réelle
                   </p>
-                )}
+                </div>
               </div>
-              {!watchedSalesOrderId && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    append({ description: '', quantity: 1, deliveredQuantity: 1 })
-                  }
-                  className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                >
-                  <Plus className="h-4 w-4" /> Ajouter
-                </button>
+
+              {errors.items?.message && (
+                <div className="text-red-600 text-sm mb-2 flex items-center gap-1.5">
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {errors.items.message}
+                </div>
               )}
-            </div>
 
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
-                      Produit *
-                    </th>
-                    <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 w-32">
-                      Qté commandée
-                    </th>
-                    <th className="text-center px-4 py-3 text-xs font-medium text-green-600 w-32 bg-green-50">
-                      Qté livrée *
-                      <div className="text-[10px] font-normal text-gray-500 mt-0.5">
-                        Modifiable
-                      </div>
-                    </th>
-                    <th className="w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {fields.map((field, i) => {
-                    const stockWarning = getStockWarning(i);
-                    return (
-                    <tr key={field.fieldId} className={stockWarning ? 'bg-red-50' : ''}>
-                      <td className="px-4 py-2">
-                        <ProductSelector
-                          value={watchedItems[i]?.productId}
-                          onChange={(product) => handleProductSelect(i, product)}
-                          disabled={!!watchedSalesOrderId}
-                          className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                        />
-                        <input type="hidden" {...register(`items.${i}.productId`)} />
-                        <input type="hidden" {...register(`items.${i}.description`, { required: true })} />
-                        <input type="hidden" {...register(`items.${i}.salesOrderItemId`)} />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="number"
-                          step="0.001"
-                          min="0"
-                          {...register(`items.${i}.quantity`, { valueAsNumber: true })}
-                          className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-center bg-gray-50"
-                          disabled={!!watchedSalesOrderId}
-                          readOnly={!!watchedSalesOrderId}
-                        />
-                      </td>
-                      <td className="px-4 py-2 bg-green-50/30">
-                        <input
-                          type="number"
-                          step="0.001"
-                          min="0"
-                          {...register(`items.${i}.deliveredQuantity`, {
-                            required: 'Quantité livrée requise',
-                            setValueAs: (v) => (v === '' ? 0 : parseFloat(v)),
-                          })}
-                          className={`w-full px-2 py-1.5 border-2 rounded text-sm text-center font-semibold focus:ring-2 ${
-                            stockWarning 
-                              ? 'border-red-500 bg-red-50 text-red-700 focus:border-red-500 focus:ring-red-200' 
-                              : 'border-green-300 text-green-700 focus:border-green-500 focus:ring-green-200'
-                          }`}
-                          placeholder="0.000"
-                        />
-                        {stockWarning && (
-                          <div className="text-xs text-red-600 mt-1 font-semibold">{stockWarning}</div>
-                        )}
-                        {errors.items?.[i]?.deliveredQuantity && (
-                          <p className="text-red-500 text-[10px] mt-0.5">Requis</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        {fields.length > 1 && !watchedSalesOrderId && (
-                          <button
-                            type="button"
-                            onClick={() => remove(i)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </td>
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">
+                        Article
+                      </th>
+                      <th className="text-center px-4 py-3 text-xs font-medium text-green-600 w-48 bg-green-50">
+                        Quantité livrée *
+                        <div className="text-[10px] font-normal text-gray-500 mt-0.5">
+                          Modifiable
+                        </div>
+                      </th>
                     </tr>
-                  );
-                  })}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {fields.map((field, i) => {
+                      const stockWarning = getStockWarning(i);
+                      const hasError = errors.items?.[i];
+                      
+                      // Get the current item data - using correct field names
+                      let itemDescription = 'Article';
+                      let itemQuantity = 0;
+                      
+                      if (isEdit && note.items) {
+                        // In edit mode, find the existing delivery note item
+                        // Try by index first, then by salesOrderItemId
+                        const existingItem = note.items[i] || note.items?.find((ni: any) => 
+                          ni.salesOrderItemId === watchedItems[i]?.sales_order_item_id
+                        );
+                        
+                        if (existingItem) {
+                          itemDescription = existingItem.description || 'Article';
+                          itemQuantity = existingItem.quantity || 0;
+                        }
+                      } else if (!isEdit && watchedSalesOrderId) {
+                        // In create mode, find the sales order item
+                        const orderItem = ordersData?.data
+                          ?.find((o: any) => o.id === watchedSalesOrderId)
+                          ?.items?.find((item: any) => item.id === watchedItems[i]?.sales_order_item_id);
+                        
+                        if (orderItem) {
+                          itemDescription = orderItem.description || 'Article';
+                          itemQuantity = orderItem.quantity || 0;
+                        }
+                      }
+                      
+                      return (
+                      <tr key={field.fieldId} className={stockWarning || hasError ? 'bg-red-50' : ''}>
+                        <td className="px-4 py-2">
+                          <div className="text-sm font-medium text-gray-900">
+                            {itemDescription}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Qté commandée: {Number(itemQuantity).toFixed(3)}
+                          </div>
+                          <input type="hidden" {...register(`items.${i}.sales_order_item_id`)} />
+                        </td>
+                        <td className="px-4 py-2 bg-green-50/30">
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            {...register(`items.${i}.quantity_delivered`, { valueAsNumber: true })}
+                            className={`w-full px-3 py-2 border-2 rounded text-sm text-center font-semibold focus:ring-2 ${
+                              stockWarning || hasError?.quantity_delivered
+                                ? 'border-red-500 bg-red-50 text-red-700 focus:border-red-500 focus:ring-red-200' 
+                                : 'border-green-300 text-green-700 focus:border-green-500 focus:ring-green-200 bg-white'
+                            }`}
+                            placeholder="0.000"
+                          />
+                          {stockWarning && (
+                            <div className="text-xs text-red-600 mt-1 font-semibold">{stockWarning}</div>
+                          )}
+                          {errors.items?.[i]?.quantity_delivered?.message && (
+                            <p className="text-red-600 text-xs mt-1">{errors.items[i]?.quantity_delivered?.message}</p>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          {!(watchedSalesOrderId || isEdit) && (
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+              Veuillez sélectionner une commande client pour continuer
+            </div>
+          )}
+
+          <Field label="Notes" error={errors.notes?.message}>
             <textarea
               {...register('notes')}
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+              className={inputCls(errors.notes?.message)}
               placeholder="Notes additionnelles..."
             />
-          </div>
+          </Field>
 
           <div className="flex gap-3 pt-4">
             <button
@@ -458,7 +516,7 @@ export default function DeliveryNoteModal({ businessId, note, onClose }: Props) 
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || (!watchedSalesOrderId && !isEdit)}
               className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
             >
               {isSubmitting

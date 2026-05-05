@@ -3,11 +3,8 @@ import axiosInstance from '../api/axiosInstance';
 
 interface EmailDraftParams {
   businessId: string;
-  clientName: string;
-  invoiceNumber: string;
-  amount: number;
-  dueDate: string;
-  isReminder: boolean;   // false = 1er envoi, true = rappel
+  invoiceId: string;
+  isReminder?: boolean;   // false = 1er envoi, true = rappel
   language?: 'fr' | 'ar';
 }
 
@@ -26,13 +23,9 @@ export function useEmailDraft() {
 
     try {
       const response = await axiosInstance.post(
-        `/businesses/${params.businessId}/sales/dashboard/generate-email-draft`,
+        `/businesses/${params.businessId}/invoices/${params.invoiceId}/generate-email-draft`,
         {
-          clientName: params.clientName,
-          invoiceNumber: params.invoiceNumber,
-          amount: params.amount,
-          dueDate: params.dueDate,
-          isReminder: params.isReminder,
+          isReminder: params.isReminder || false,
           language: params.language || 'fr',
         }
       );

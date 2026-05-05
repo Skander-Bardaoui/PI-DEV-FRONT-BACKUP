@@ -36,6 +36,7 @@ export const PO_STATUS_COLORS: Record<POStatus, string> = {
 export interface SupplierPOItem {
   id:                string;
   supplier_po_id:    string;
+  item_type:         'PRODUCT' | 'SERVICE';
   product_id:        string | null;
   description:       string;
   quantity_ordered:  number;
@@ -70,7 +71,8 @@ export interface SupplierPO {
 
 // ── DTOs ─────────────────────────────────────────────────────────────────
 export interface CreateSupplierPOItemDto {
-  product_id?:    string;
+  item_type?:     'PRODUCT' | 'SERVICE';
+  product_id:     string; // ✅ Made REQUIRED for stock tracking
   description:    string;
   quantity_ordered: number;
   unit_price_ht:  number;

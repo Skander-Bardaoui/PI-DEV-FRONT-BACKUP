@@ -12,19 +12,20 @@ import { formatAmount, formatDate, round3, TIMBRE_FISCAL, POStatus } from '@/typ
 import UploadInvoiceScan from '@/components/purchases/UploadInvoiceScan';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const inputCls = (error?: string) => `
-  w-full px-3.5 py-2.5 border-2 rounded-xl text-sm transition-all duration-150 outline-none
-  focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50
-  ${error ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-red-50' : 'border-gray-200 bg-white hover:border-gray-300'}
-`;
+const inputCls = (error?: string) =>
+  `w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm transition-colors ${
+    error ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200' : 'border-gray-300'
+  }`;
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return (
-    <p className="flex items-center gap-1 text-red-500 text-xs mt-1.5 font-medium">
-      <span className="w-1 h-1 rounded-full bg-red-400 inline-block" />
-      {msg}
-    </p>
+    <div className="flex items-start gap-1.5 mt-1.5">
+      <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+      </svg>
+      <p className="text-red-600 text-xs font-medium">{msg}</p>
+    </div>
   );
 }
 
@@ -57,12 +58,13 @@ export function PurchaseInvoiceModal({ businessId, onClose }: Props) {
   const create = useCreatePurchaseInvoice(businessId);
 
   const {
-    register, handleSubmit, watch, setValue,
+    register, handleSubmit, watch, setValue, trigger,
     formState: { errors, isSubmitting },
   } = useForm<PurchaseInvoiceFormValues>({
     resolver: zodResolver(purchaseInvoiceSchema),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: {
-      invoice_number_supplier: '',
       supplier_id:   '',
       supplier_po_id: '',
       invoice_date:  new Date().toISOString().split('T')[0],
@@ -81,11 +83,14 @@ export function PurchaseInvoiceModal({ businessId, onClose }: Props) {
   ];
   const netDisplay = round3(Number(ht) + Number(tax) + Number(timbre));
 
+  // Calculer le taux de TVA actuel
+  const currentTvaRate = Number(ht) > 0 ? Math.round((Number(tax) / Number(ht)) * 100) : 0;
+
   // Taux de TVA communs (raccourcis)
   const TVA_RATES = [0, 7, 13, 19];
   const applyTva = (rate: number) => {
     const tva = round3(Number(ht) * rate / 100);
-    setValue('tax_amount', tva);
+    setValue('tax_amount', tva, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
   };
 
   // Pré-remplir depuis un BR
@@ -144,18 +149,52 @@ export function PurchaseInvoiceModal({ businessId, onClose }: Props) {
   };
 
   const onSubmit = async (values: PurchaseInvoiceFormValues) => {
-    await create.mutateAsync({
-      invoice_number_supplier: values.invoice_number_supplier,
-      supplier_id:    values.supplier_id,
-      supplier_po_id: values.supplier_po_id || undefined,
-      invoice_date:   values.invoice_date,
-      due_date:       values.due_date || undefined,
-      subtotal_ht:    Number(values.subtotal_ht)   || 0,
-      tax_amount:     Number(values.tax_amount)    || 0,
-      timbre_fiscal:  Number(values.timbre_fiscal) || TIMBRE_FISCAL,
-      receipt_url:    values.receipt_url || undefined,
-    });
-    onClose();
+    try {
+      // Nettoyer et valider les données avant envoi
+      const cleanedData = {
+        supplier_id:    values.supplier_id,
+        supplier_po_id: values.supplier_po_id || undefined,
+        goods_receipt_id: selectedGRId || undefined, // Ajouter l'ID du BR sélectionné
+        invoice_date:   values.invoice_date,
+        due_date:       values.due_date || undefined,
+        subtotal_ht:    Number(values.subtotal_ht) || 0,
+        tax_amount:     Number(values.tax_amount) || 0,
+        timbre_fiscal:  Number(values.timbre_fiscal) || TIMBRE_FISCAL,
+        receipt_url:    values.receipt_url || undefined,
+      };
+
+      // Vérifier qu'il n'y a pas de NaN
+      if (isNaN(cleanedData.subtotal_ht) || isNaN(cleanedData.tax_amount) || isNaN(cleanedData.timbre_fiscal)) {
+        console.error('Valeurs numériques invalides détectées');
+        return;
+      }
+
+      await create.mutateAsync(cleanedData);
+      onClose();
+    } catch (error) {
+      console.error('Erreur lors de la soumission:', error);
+    }
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Déclencher la validation de tous les champs
+    const isValid = await trigger();
+    
+    if (!isValid) {
+      // Scroll vers la première erreur
+      const firstErrorField = Object.keys(errors)[0];
+      if (firstErrorField) {
+        const element = document.querySelector(`[name="${firstErrorField}"]`) as HTMLElement;
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    } else {
+      // Si valide, soumettre
+      handleSubmit(onSubmit)();
+    }
   };
 
   return (
@@ -393,7 +432,25 @@ export function PurchaseInvoiceModal({ businessId, onClose }: Props) {
 
         {/* Étape 4 : Formulaire */}
         {step === 'form' && (
-          <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6" noValidate>
+          <form onSubmit={handleFormSubmit} className="p-6 space-y-6" noValidate>
+            
+            {/* Message d'erreur global */}
+            {Object.keys(errors).length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-red-800 mb-1">Erreurs de validation</h3>
+                    <p className="text-sm text-red-700">Veuillez corriger les erreurs ci-dessous avant de continuer.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {creationMode === 'from-gr' && (
               <div className="flex items-center justify-between">
                 <button
@@ -427,16 +484,19 @@ export function PurchaseInvoiceModal({ businessId, onClose }: Props) {
                 label="Identification"
               />
               <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    N° facture fournisseur <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    {...register('invoice_number_supplier')}
-                    className={inputCls(errors.invoice_number_supplier?.message)}
-                    placeholder="Ex: FACT-2024-0042"
-                  />
-                  <FieldError msg={errors.invoice_number_supplier?.message} />
+                {/* Info: Numéro auto-généré */}
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-shrink-0 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">✓</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-indigo-900">Numéro de facture auto-généré</p>
+                      <p className="text-xs text-indigo-700 mt-0.5">
+                        Un numéro unique sera créé automatiquement (ex: FACT-2026-0001)
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {creationMode === 'manual' && (
@@ -490,8 +550,12 @@ export function PurchaseInvoiceModal({ businessId, onClose }: Props) {
                   </label>
                   <input
                     type="number" step="0.001" min="0"
-                    {...register('subtotal_ht', { valueAsNumber: true })}
+                    {...register('subtotal_ht', { 
+                      valueAsNumber: true,
+                      setValueAs: (v) => v === '' ? 0 : Number(v)
+                    })}
                     className={inputCls(errors.subtotal_ht?.message) + ' text-right font-mono'}
+                    placeholder="0.000"
                   />
                   <FieldError msg={errors.subtotal_ht?.message} />
                 </div>
@@ -503,18 +567,33 @@ export function PurchaseInvoiceModal({ businessId, onClose }: Props) {
                       TVA <span className="text-red-500">*</span>
                     </label>
                     <div className="flex gap-1">
-                      {TVA_RATES.map(r => (
-                        <button key={r} type="button" onClick={() => applyTva(r)}
-                          className="px-2 py-0.5 text-xs font-semibold rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors">
-                          {r}%
-                        </button>
-                      ))}
+                      {TVA_RATES.map(r => {
+                        const isActive = currentTvaRate === r;
+                        return (
+                          <button 
+                            key={r} 
+                            type="button" 
+                            onClick={() => applyTva(r)}
+                            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+                              isActive 
+                                ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-300' 
+                                : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                            }`}
+                          >
+                            {r}%
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                   <input
                     type="number" step="0.001" min="0"
-                    {...register('tax_amount', { valueAsNumber: true })}
+                    {...register('tax_amount', { 
+                      valueAsNumber: true,
+                      setValueAs: (v) => v === '' ? 0 : Number(v)
+                    })}
                     className={inputCls(errors.tax_amount?.message) + ' text-right font-mono'}
+                    placeholder="0.000"
                   />
                   <FieldError msg={errors.tax_amount?.message} />
                 </div>
@@ -527,8 +606,12 @@ export function PurchaseInvoiceModal({ businessId, onClose }: Props) {
                   </label>
                   <input
                     type="number" step="0.001" min="0"
-                    {...register('timbre_fiscal', { valueAsNumber: true })}
+                    {...register('timbre_fiscal', { 
+                      valueAsNumber: true,
+                      setValueAs: (v) => v === '' ? TIMBRE_FISCAL : Number(v)
+                    })}
                     className={inputCls(errors.timbre_fiscal?.message) + ' text-right font-mono'}
+                    placeholder="1.000"
                   />
                   <FieldError msg={errors.timbre_fiscal?.message} />
                 </div>

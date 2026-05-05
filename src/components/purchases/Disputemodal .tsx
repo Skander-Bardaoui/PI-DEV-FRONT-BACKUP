@@ -31,10 +31,12 @@ export function DisputeModal({ invoice, onClose, onConfirm }: Props) {
   const [customError,  setCustomError]  = useState('');
 
   const {
-    register, handleSubmit, watch,
+    register, handleSubmit, watch, trigger,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: { dispute_reason: '' },
   });
 
@@ -51,6 +53,15 @@ export function DisputeModal({ invoice, onClose, onConfirm }: Props) {
     } else {
       onConfirm(dispute_reason);
     }
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const isValid = await trigger();
+    if (!isValid) {
+      return;
+    }
+    handleSubmit(onSubmit)();
   };
 
   return (
@@ -92,7 +103,24 @@ export function DisputeModal({ invoice, onClose, onConfirm }: Props) {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+          <form onSubmit={handleFormSubmit} noValidate className="space-y-5">
+            
+            {/* Message d'erreur global */}
+            {Object.keys(errors).length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-red-800 mb-1">Erreurs de validation</h3>
+                    <p className="text-sm text-red-700">Veuillez corriger les erreurs ci-dessous avant de continuer.</p>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* Motifs de litige */}
             <div>

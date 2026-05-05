@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Loader2, Building2, Mail, Globe, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { getMyTenant } from '../../api/tenant.api';
+import { getAssetUrl } from '@/config/api.config';
 
 export default function TenantView() {
   const [isLoading, setIsLoading] = useState(true);
@@ -57,7 +58,7 @@ export default function TenantView() {
           <div className="relative h-24 w-24 rounded-xl overflow-hidden bg-gradient-to-br from-indigo-100 to-purple-100 border-2 border-gray-200">
             {tenant?.logoUrl ? (
               <img
-                src={`http://localhost:3001${tenant.logoUrl}`}
+                src={getAssetUrl(tenant.logoUrl)}
                 alt="Logo"
                 className="h-full w-full object-contain p-2"
               />

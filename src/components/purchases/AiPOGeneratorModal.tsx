@@ -29,14 +29,16 @@ interface Props {
 }
 
 export default function AiPOGeneratorModal({ businessId, onClose, onSuccess }: Props) {
-  const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [generated, setGenerated] = useState<GeneratedPO | null>(null);
   const [creating, setCreating] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [text, setText] = useState('');
 
   const queryClient = useQueryClient();
+
+  // Version du composant pour forcer le rechargement du cache
+  console.log('🔄 AiPOGeneratorModal - Version: 2024-04-26-NO-REQUIRED-FINAL');
 
   const examples = [
     "Commander 500 kg de farine chez Ali Boulangerie pour le 15 avril",
@@ -44,26 +46,48 @@ export default function AiPOGeneratorModal({ businessId, onClose, onSuccess }: P
     "Prendre 50 litres d'huile d'olive chez Olive & Co pour demain",
   ];
 
-  const handleGenerate = async () => {
-    if (!text.trim()) {
-      setError('Veuillez saisir une commande');
-      return;
-    }
-
-    setLoading(true);
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Réinitialiser l'erreur
     setError('');
+    
+    const trimmedText = text.trim();
+    
+    console.log('📝 [Frontend] Soumission du formulaire');
+    console.log('📝 [Frontend] Texte brut:', text);
+    console.log('📝 [Frontend] Texte trimmed:', trimmedText);
+    console.log('📝 [Frontend] Longueur:', trimmedText.length);
+    console.log('📝 [Frontend] Payload à envoyer:', JSON.stringify({ text: trimmedText }));
+    
+    setLoading(true);
     setGenerated(null);
 
     try {
-      const { data } = await axiosInstance.post(
-        `/businesses/${businessId}/supplier-pos/generate-from-text`,
-        { text: text.trim() },
-      );
-      setGenerated(data);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+      const url = `/businesses/${businessId}/supplier-pos/generate-from-text`;
+      console.log('📝 [Frontend] URL:', url);
+      
+      const { data: result } = await axiosInstance.post(url, { text: trimmedText });
+      
+      console.log('✅ [Frontend] Succès:', result);
+      setGenerated(result);
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Erreur lors de la génération');
+      console.error('❌ [Frontend] Erreur:', err?.response?.data);
+      
+      let errorMessage = 'Erreur lors de la génération';
+      
+      // Gérer les erreurs spécifiques
+      if (err?.response?.status === 503 || err?.response?.data?.message?.includes('503')) {
+        errorMessage = "🔄 L'intelligence artificielle est temporairement surchargée. Veuillez réessayer dans quelques instants.";
+      } else if (err?.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err?.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err?.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -119,7 +143,7 @@ export default function AiPOGeneratorModal({ businessId, onClose, onSuccess }: P
               <Sparkles className="h-5 w-5 animate-pulse" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Génération de BC par IA</h2>
+              <h2 className="text-lg font-bold">Assistant IA - Création de BC</h2>
               <p className="text-xs text-purple-100">Décrivez votre commande en langage naturel</p>
             </div>
           </div>
@@ -131,7 +155,7 @@ export default function AiPOGeneratorModal({ businessId, onClose, onSuccess }: P
           </button>
         </div>
 
-        <div className="p-6">
+        <form onSubmit={onSubmit} className="p-6">
           
           {/* Exemples */}
           <div className="mb-4">
@@ -140,7 +164,11 @@ export default function AiPOGeneratorModal({ businessId, onClose, onSuccess }: P
               {examples.map((ex, i) => (
                 <button
                   key={i}
-                  onClick={() => setText(ex)}
+                  type="button"
+                  onClick={() => {
+                    setText(ex);
+                    setError('');
+                  }}
                   className="text-xs px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors border border-purple-200"
                 >
                   {ex}
@@ -156,29 +184,31 @@ export default function AiPOGeneratorModal({ businessId, onClose, onSuccess }: P
             </label>
             <textarea
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                console.log('✏️ Changement:', e.target.value.length, 'caractères');
+                setText(e.target.value);
+                setError(''); // Effacer l'erreur
+              }}
               placeholder="Ex: Commander 500 kg de farine chez Ali Boulangerie pour le 15 avril"
               rows={4}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none transition-colors"
             />
+            {error && (
+              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
             <p className="text-xs text-gray-500 mt-1">
               Mentionnez : le produit, la quantité, le fournisseur (et optionnellement la date)
             </p>
           </div>
 
-          {/* Erreur */}
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
-
           {/* Bouton générer */}
           {!generated && (
             <button
-              onClick={handleGenerate}
-              disabled={loading || !text.trim()}
+              type="submit"
+              disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 bg-[length:200%_100%] hover:bg-[position:100%_0] text-white rounded-xl transition-all duration-500 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-[1.02] active:scale-[0.98]"
             >
               {loading ? (
@@ -189,121 +219,126 @@ export default function AiPOGeneratorModal({ businessId, onClose, onSuccess }: P
               ) : (
                 <>
                   <Sparkles className="h-5 w-5" />
-                  Générer le BC avec l'IA
+                  Créer le BC
                 </>
               )}
             </button>
           )}
+        </form>
 
-          {/* Résultat généré */}
-          {generated && (
-            <div className="space-y-4 animate-in slide-in-from-bottom duration-500">
-              
-              {/* Score de confiance */}
-              <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl animate-in fade-in slide-in-from-top duration-700">
-                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-lg animate-in zoom-in duration-500 delay-200">
-                  {generated.confidence}%
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-green-900 flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 animate-in zoom-in duration-300 delay-300" />
-                    BC généré avec succès !
-                  </p>
-                  <p className="text-xs text-green-700 mt-0.5">
-                    Vérifiez les informations avant de créer le bon de commande
-                  </p>
-                </div>
+        {/* Résultat généré */}
+        {generated && (
+          <div className="px-6 pb-6 space-y-4 animate-in slide-in-from-bottom duration-500">
+            
+            {/* Score de confiance */}
+            <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl animate-in fade-in slide-in-from-top duration-700">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-lg animate-in zoom-in duration-500 delay-200">
+                {generated.confidence}%
               </div>
-
-              {/* Détails du BC */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                
-                {/* Fournisseur */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Fournisseur</span>
-                  <span className="font-semibold text-gray-900">{generated.supplier_name}</span>
-                </div>
-
-                {/* Date de livraison */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Date de livraison</span>
-                  <span className="font-semibold text-gray-900">
-                    {new Date(generated.delivery_date).toLocaleDateString('fr-FR')}
-                  </span>
-                </div>
-
-                {/* Articles */}
-                <div className="pt-3 border-t border-gray-200">
-                  <p className="text-sm font-semibold text-gray-900 mb-2">Articles commandés</p>
-                  {generated.items.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 px-3 bg-white rounded-lg mb-2">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{item.description}</p>
-                        <p className="text-xs text-gray-500">
-                          {item.quantity} × {item.unit_price_ht.toFixed(3)} TND HT
-                          {item.tax_rate_value > 0 && ` (TVA ${item.tax_rate_value}%)`}
-                        </p>
-                      </div>
-                      <span className="font-semibold text-gray-900">
-                        {(item.quantity * item.unit_price_ht * (1 + item.tax_rate_value / 100)).toFixed(3)} TND
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Totaux */}
-                <div className="pt-3 border-t border-gray-200 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Total HT</span>
-                    <span className="font-semibold">{totalHT.toFixed(3)} TND</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Total TVA</span>
-                    <span className="font-semibold">{totalTVA.toFixed(3)} TND</span>
-                  </div>
-                  <div className="flex items-center justify-between text-base pt-2 border-t border-gray-300">
-                    <span className="font-semibold text-gray-900">Total TTC</span>
-                    <span className="font-bold text-purple-600 text-lg">{totalTTC.toFixed(3)} TND</span>
-                  </div>
-                </div>
-
-                {/* Notes */}
-                {generated.notes && (
-                  <div className="pt-3 border-t border-gray-200">
-                    <p className="text-xs text-gray-500 italic">{generated.notes}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setGenerated(null)}
-                  className="flex-1 py-3 border-2 border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 hover:border-gray-400 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  Modifier
-                </button>
-                <button
-                  onClick={handleCreate}
-                  disabled={creating}
-                  className="flex-2 py-3 px-6 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 bg-[length:200%_100%] hover:bg-[position:100%_0] text-white rounded-xl transition-all duration-500 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  {creating ? (
-                    <>
-                      <Loader className="h-5 w-5 animate-spin" />
-                      Création...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-5 w-5" />
-                      Créer le BC
-                    </>
-                  )}
-                </button>
+              <div className="flex-1">
+                <p className="font-semibold text-green-900 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 animate-in zoom-in duration-300 delay-300" />
+                  BC généré avec succès !
+                </p>
+                <p className="text-xs text-green-700 mt-0.5">
+                  Vérifiez les informations avant de créer le bon de commande
+                </p>
               </div>
             </div>
-          )}
-        </div>
+
+            {/* Détails du BC */}
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              
+              {/* Fournisseur */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Fournisseur</span>
+                <span className="font-semibold text-gray-900">{generated.supplier_name}</span>
+              </div>
+
+              {/* Date de livraison */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Date de livraison</span>
+                <span className="font-semibold text-gray-900">
+                  {new Date(generated.delivery_date).toLocaleDateString('fr-FR')}
+                </span>
+              </div>
+
+              {/* Articles */}
+              <div className="pt-3 border-t border-gray-200">
+                <p className="text-sm font-semibold text-gray-900 mb-2">Articles commandés</p>
+                {generated.items.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 px-3 bg-white rounded-lg mb-2">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">{item.description}</p>
+                      <p className="text-xs text-gray-500">
+                        {item.quantity} × {item.unit_price_ht.toFixed(3)} TND HT
+                        {item.tax_rate_value > 0 && ` (TVA ${item.tax_rate_value}%)`}
+                      </p>
+                    </div>
+                    <span className="font-semibold text-gray-900">
+                      {(item.quantity * item.unit_price_ht * (1 + item.tax_rate_value / 100)).toFixed(3)} TND
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Totaux */}
+              <div className="pt-3 border-t border-gray-200 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Total HT</span>
+                  <span className="font-semibold">{totalHT.toFixed(3)} TND</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Total TVA</span>
+                  <span className="font-semibold">{totalTVA.toFixed(3)} TND</span>
+                </div>
+                <div className="flex items-center justify-between text-base pt-2 border-t border-gray-300">
+                  <span className="font-semibold text-gray-900">Total TTC</span>
+                  <span className="font-bold text-purple-600 text-lg">{totalTTC.toFixed(3)} TND</span>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {generated.notes && (
+                <div className="pt-3 border-t border-gray-200">
+                  <p className="text-xs text-gray-500 italic">{generated.notes}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setGenerated(null);
+                  setError('');
+                }}
+                className="flex-1 py-3 border-2 border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 hover:border-gray-400 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Modifier
+              </button>
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={creating}
+                className="flex-2 py-3 px-6 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 bg-[length:200%_100%] hover:bg-[position:100%_0] text-white rounded-xl transition-all duration-500 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:scale-[1.02] active:scale-[0.98]"
+              >
+                {creating ? (
+                  <>
+                    <Loader className="h-5 w-5 animate-spin" />
+                    Création...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-5 w-5" />
+                    Créer le BC
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

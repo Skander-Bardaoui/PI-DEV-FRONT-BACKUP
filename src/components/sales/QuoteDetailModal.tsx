@@ -1,5 +1,5 @@
 // src/components/sales/QuoteDetailModal.tsx
-import { X, Package, ChevronDown, ChevronUp, Edit, Trash2, Send, Check, XCircle, FileText, ShoppingCart } from 'lucide-react';
+import { X, Package, ChevronDown, ChevronUp, Edit, Trash2, Send, Check, XCircle, FileText, ShoppingCart, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Quote, QUOTE_STATUS_COLORS, QUOTE_STATUS_LABELS, QuoteStatus } from '@/types/quote';
@@ -14,10 +14,11 @@ import {
 } from '@/hooks/useQuotes';
 import QuoteModal from './QuoteModal';
 import ConfirmModal from '../ui/ConfirmModal';
-import PDFButton from '../purchases/PDFButton';
+import { ActionButton, ActionSection } from '../ui/ActionButton';
 import { printQuote } from '@/utils/sales-quote-print';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
+import { getBusinessInfo } from '@/utils/business-info.utils';
 
 interface Props {
   quote: Quote;
@@ -215,80 +216,105 @@ export default function QuoteDetailModal({ quote: initialQuote, businessId, onCl
           )}
 
           {/* Footer - Actions */}
-          <div className="p-6 border-t border-gray-200 space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <PDFButton
-                onClick={() => printQuote(quote, (user as any)?.business?.name || 'Entreprise', (user as any)?.business?.matricule_fiscal, (user as any)?.business?.address)}
-                label="Télécharger PDF"
-                variant="ghost"
-              />
-              {canEdit && (
-                <button
-                  onClick={() => setEditOpen(true)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-1"
-                >
-                  <Edit className="h-4 w-4" />
-                  Modifier
-                </button>
+          <div className="p-6 border-t border-gray-200 bg-gray-50">
+            <div className="space-y-4">
+              
+              {/* Section: Documents & Communication */}
+              <ActionSection title="Documents & Communication">
+                <ActionButton
+                  icon={FileText}
+                  label="Télécharger PDF"
+                  description="Générer le document"
+                  onClick={async () => {
+                    const info = await getBusinessInfo(user);
+                    printQuote(quote, info.businessName, info.businessMF, info.businessAddress);
+                  }}
+                  variant="danger"
+                />
+
+                {canSend && (
+                  <ActionButton
+                    icon={Mail}
+                    label="Envoyer au client"
+                    description={quote.client?.email || 'Email client'}
+                    onClick={() => send.mutate(quote.id)}
+                    variant="success"
+                    loading={send.isPending}
+                  />
+                )}
+              </ActionSection>
+
+              {/* Section: Gestion du devis */}
+              {(canEdit || canAccept || canReject) && (
+                <ActionSection title="Gestion du devis">
+                  {canEdit && (
+                    <ActionButton
+                      icon={Edit}
+                      label="Modifier"
+                      description="Éditer les détails"
+                      onClick={() => setEditOpen(true)}
+                      variant="secondary"
+                    />
+                  )}
+
+                  {canAccept && (
+                    <ActionButton
+                      icon={Check}
+                      label="Accepter → Commande"
+                      description="Accepter et créer commande"
+                      onClick={handleAccept}
+                      variant="success"
+                      loading={accept.isPending || convertToOrder.isPending}
+                    />
+                  )}
+
+                  {canReject && (
+                    <ActionButton
+                      icon={XCircle}
+                      label="Rejeter"
+                      description="Refuser le devis"
+                      onClick={() => reject.mutate(quote.id)}
+                      variant="danger"
+                      loading={reject.isPending}
+                    />
+                  )}
+                </ActionSection>
               )}
-              {canSend && (
-                <button
-                  onClick={() => send.mutate(quote.id)}
-                  disabled={send.isPending}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                >
-                  <Send className="h-4 w-4" />
-                  Envoyer au client
-                </button>
-              )}
-              {canAccept && (
-                <button
-                  onClick={handleAccept}
-                  disabled={accept.isPending || convertToOrder.isPending}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
-                >
-                  <Check className="h-4 w-4" />
-                  {(accept.isPending || convertToOrder.isPending) ? 'Acceptation...' : 'Accepter → Commande'}
-                </button>
-              )}
-              {canReject && (
-                <button
-                  onClick={() => reject.mutate(quote.id)}
-                  disabled={reject.isPending}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 flex items-center gap-1"
-                >
-                  <XCircle className="h-4 w-4" />
-                  Rejeter
-                </button>
-              )}
+
+              {/* Section: Conversion */}
               {canConvert && (
-                <>
-                  <button
+                <ActionSection title="Conversion">
+                  <ActionButton
+                    icon={FileText}
+                    label="Convertir en facture"
+                    description="Créer une facture"
                     onClick={handleConvertToInvoice}
-                    disabled={convertToInvoice.isPending}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
-                  >
-                    <FileText className="h-4 w-4" />
-                    {convertToInvoice.isPending ? 'Conversion...' : 'Convertir en facture'}
-                  </button>
-                  <button
+                    variant="indigo"
+                    loading={convertToInvoice.isPending}
+                  />
+
+                  <ActionButton
+                    icon={ShoppingCart}
+                    label="Convertir en commande"
+                    description="Créer une commande"
                     onClick={handleConvertToOrder}
-                    disabled={convertToOrder.isPending}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    {convertToOrder.isPending ? 'Conversion...' : 'Convertir en commande'}
-                  </button>
-                </>
+                    variant="purple"
+                    loading={convertToOrder.isPending}
+                  />
+                </ActionSection>
               )}
+
+              {/* Section: Actions critiques */}
               {canDelete && (
-                <button
-                  onClick={() => setDeleteConfirm(true)}
-                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 flex items-center gap-1 ml-auto"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Supprimer
-                </button>
+                <ActionSection title="Actions critiques" variant="danger">
+                  <ActionButton
+                    icon={Trash2}
+                    label="Supprimer"
+                    description="Supprimer définitivement"
+                    onClick={() => setDeleteConfirm(true)}
+                    variant="danger"
+                  />
+                </ActionSection>
               )}
             </div>
           </div>

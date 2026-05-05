@@ -1,7 +1,6 @@
 export enum StockMovementType {
   ENTREE_ACHAT = 'ENTREE_ACHAT',
   SORTIE_VENTE = 'SORTIE_VENTE',
-  ENTREE_RETOUR_CLIENT = 'ENTREE_RETOUR_CLIENT',
   AJUSTEMENT_POSITIF = 'AJUSTEMENT_POSITIF',
   AJUSTEMENT_NEGATIF = 'AJUSTEMENT_NEGATIF',
 }
@@ -16,6 +15,7 @@ export interface StockMovement {
   stock_after: number;
   source_type: string | null;
   source_id: string | null;
+  warehouse_id?: string | null;
   note: string | null;
   created_by: string | null;
   created_at: string;
@@ -32,6 +32,7 @@ export interface CreateStockMovementDto {
   quantity: number;
   source_type?: string;
   source_id?: string;
+  warehouse_id?: string;
   note?: string;
 }
 
@@ -59,7 +60,6 @@ export interface ProductStockSummary {
 export const STOCK_MOVEMENT_TYPE_LABELS: Record<StockMovementType, string> = {
   [StockMovementType.ENTREE_ACHAT]: 'Entrée Achat',
   [StockMovementType.SORTIE_VENTE]: 'Sortie Vente',
-  [StockMovementType.ENTREE_RETOUR_CLIENT]: 'Retour Client',
   [StockMovementType.AJUSTEMENT_POSITIF]: 'Ajustement +',
   [StockMovementType.AJUSTEMENT_NEGATIF]: 'Ajustement -',
 };
@@ -67,7 +67,6 @@ export const STOCK_MOVEMENT_TYPE_LABELS: Record<StockMovementType, string> = {
 export const STOCK_MOVEMENT_TYPE_COLORS: Record<StockMovementType, string> = {
   [StockMovementType.ENTREE_ACHAT]: 'bg-blue-100 text-blue-800',
   [StockMovementType.SORTIE_VENTE]: 'bg-red-100 text-red-800',
-  [StockMovementType.ENTREE_RETOUR_CLIENT]: 'bg-green-100 text-green-800',
   [StockMovementType.AJUSTEMENT_POSITIF]: 'bg-purple-100 text-purple-800',
   [StockMovementType.AJUSTEMENT_NEGATIF]: 'bg-orange-100 text-orange-800',
 };

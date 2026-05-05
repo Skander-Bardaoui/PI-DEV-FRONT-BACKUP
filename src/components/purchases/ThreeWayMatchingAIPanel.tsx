@@ -1,6 +1,6 @@
 // src/components/purchases/ThreeWayMatchingAIPanel.tsx
 //
-// Panneau d'affichage de l'analyse IA du rapprochement 3 voies
+// Panneau d'affichage de l'analyse IA du contrôle de facture
 
 import React from 'react';
 import {

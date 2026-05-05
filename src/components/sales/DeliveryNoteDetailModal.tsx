@@ -1,5 +1,5 @@
 // src/components/sales/DeliveryNoteDetailModal.tsx
-import { X, Package, ChevronDown, ChevronUp, Edit, Trash2, Truck, XCircle, ShoppingCart } from 'lucide-react';
+import { X, Package, ChevronDown, ChevronUp, Edit, Trash2, Truck, XCircle, ShoppingCart, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { DeliveryNote, DELIVERY_NOTE_STATUS_COLORS, DELIVERY_NOTE_STATUS_LABELS, DeliveryNoteStatus } from '@/types/delivery-note';
 import {
@@ -14,6 +14,8 @@ import ConfirmModal from '../ui/ConfirmModal';
 import PDFButton from '../purchases/PDFButton';
 import { printDeliveryNote } from '@/utils/delivery-note-print';
 import { useAuth } from '@/hooks/useAuth';
+import { ActionButton, ActionSection } from '../ui/ActionButton';
+import { getBusinessInfo } from '@/utils/business-info.utils';
 
 interface Props {
   note: DeliveryNote;
@@ -47,7 +49,7 @@ export default function DeliveryNoteDetailModal({ note: initialNote, businessId,
   const canEdit = note.status === DeliveryNoteStatus.PENDING;
   const canMarkDelivered = note.status === DeliveryNoteStatus.PENDING;
   const canCancel = note.status === DeliveryNoteStatus.PENDING;
-  const canDelete = note.status === DeliveryNoteStatus.PENDING;
+  const canDelete = note.status === DeliveryNoteStatus.PENDING && onDelete !== undefined;
   
   // Check if all items have delivered quantity > 0
   const hasZeroQuantity = note.items?.some((item: any) => Number(item.deliveredQuantity) === 0);
@@ -338,56 +340,72 @@ export default function DeliveryNoteDetailModal({ note: initialNote, businessId,
           )}
 
           {/* Footer - Actions */}
-          <div className="p-6 border-t border-gray-200 space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <PDFButton
-                onClick={() => printDeliveryNote(note, (user as any)?.business?.name || 'Entreprise', (user as any)?.business?.matricule_fiscal, (user as any)?.business?.address)}
-                label="Télécharger PDF"
-                variant="ghost"
-              />
-              {canEdit && (
-                <button
-                  onClick={() => setEditOpen(true)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-1"
-                >
-                  <Edit className="h-4 w-4" />
-                  Modifier
-                </button>
+          <div className="p-6 border-t border-gray-200 bg-gray-50">
+            <div className="space-y-4">
+              
+              {/* Section: Documents */}
+              <ActionSection title="Documents">
+                <ActionButton
+                  icon={FileText}
+                  label="Télécharger PDF"
+                  description="Générer le document"
+                  onClick={async () => {
+                    const info = await getBusinessInfo(user);
+                    printDeliveryNote(note, info.businessName, info.businessMF, info.businessAddress);
+                  }}
+                  variant="danger"
+                />
+              </ActionSection>
+
+              {/* Section: Gestion */}
+              {(canEdit || canMarkDelivered) && (
+                <ActionSection title="Gestion du bon de livraison">
+                  {canEdit && (
+                    <ActionButton
+                      icon={Edit}
+                      label="Modifier"
+                      description="Éditer les détails"
+                      onClick={() => setEditOpen(true)}
+                      variant="secondary"
+                    />
+                  )}
+                  {canMarkDelivered && (
+                    <ActionButton
+                      icon={Truck}
+                      label={hasZeroQuantity ? 'Corriger quantités' : 'Marquer livré'}
+                      description={hasZeroQuantity ? 'Quantités manquantes ⚠️' : 'Confirmer la livraison'}
+                      onClick={handleMarkDelivered}
+                      variant={hasZeroQuantity ? 'secondary' : 'success'}
+                      disabled={hasZeroQuantity}
+                      loading={markDelivered.isPending}
+                    />
+                  )}
+                </ActionSection>
               )}
-              {canMarkDelivered && (
-                <button
-                  onClick={handleMarkDelivered}
-                  disabled={markDelivered.isPending}
-                  className={`px-4 py-2 rounded-lg text-sm flex items-center gap-1 disabled:opacity-50 ${
-                    hasZeroQuantity 
-                      ? 'bg-gray-400 text-white cursor-not-allowed' 
-                      : 'bg-green-600 text-white hover:bg-green-700'
-                  }`}
-                  title={hasZeroQuantity ? 'Modifiez d\'abord les quantités livrées' : 'Marquer comme livré'}
-                >
-                  <Truck className="h-4 w-4" />
-                  Marquer livré
-                  {hasZeroQuantity && <span className="text-xs ml-1">⚠️</span>}
-                </button>
-              )}
-              {canCancel && (
-                <button
-                  onClick={() => cancel.mutate(note.id)}
-                  disabled={cancel.isPending}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 flex items-center gap-1"
-                >
-                  <XCircle className="h-4 w-4" />
-                  Annuler
-                </button>
-              )}
-              {canDelete && (
-                <button
-                  onClick={() => setDeleteConfirm(true)}
-                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 flex items-center gap-1 ml-auto"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Supprimer
-                </button>
+
+              {/* Section: Actions critiques */}
+              {(canCancel || canDelete) && (
+                <ActionSection title="Actions critiques" variant="danger">
+                  {canCancel && (
+                    <ActionButton
+                      icon={XCircle}
+                      label="Annuler"
+                      description="Annuler le bon de livraison"
+                      onClick={() => cancel.mutate(note.id)}
+                      variant="warning"
+                      loading={cancel.isPending}
+                    />
+                  )}
+                  {canDelete && (
+                    <ActionButton
+                      icon={Trash2}
+                      label="Supprimer"
+                      description="Supprimer définitivement"
+                      onClick={() => setDeleteConfirm(true)}
+                      variant="danger"
+                    />
+                  )}
+                </ActionSection>
               )}
             </div>
           </div>

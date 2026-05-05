@@ -1,23 +1,75 @@
 // src/components/sales/RecurringInvoiceModal.tsx
 import { useForm } from 'react-hook-form';
-import { X } from 'lucide-react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { X, Calendar } from 'lucide-react';
+import { recurringInvoiceSchema, RecurringInvoiceFormValues } from '@/schemas/sales.schemas';
 import { useCreateRecurringInvoice, useUpdateRecurringInvoice } from '@/hooks/useRecurringInvoices';
 import { useClients } from '@/hooks/useClients';
-import { RecurringFrequency, RECURRING_FREQUENCY_LABELS } from '@/types/recurring-invoice';
-import { useState } from 'react';
+import { RecurringFrequency, RECURRING_FREQUENCY_LABELS, DiscountType, DISCOUNT_TYPE_LABELS } from '@/types/recurring-invoice';
+import { useState, useMemo } from 'react';
 
 const TIMBRE_FISCAL = 1.000;
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
-interface RecurringInvoiceFormValues {
-  client_id: string;
-  description: string;
-  frequency: RecurringFrequency;
-  start_date: string;
-  end_date?: string;
-  amount: number;
-  tax_rate: number;
-  notes?: string;
+// ── Composant Field avec erreur ───────────────────────────────────────────────
+const Field = ({
+  label, error, required, children,
+}: { label: string; error?: string; required?: boolean; children: React.ReactNode }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {label} {required && <span className="text-red-500">*</span>}
+    </label>
+    {children}
+    {error && (
+      <div className="flex items-start gap-1.5 mt-1.5">
+        <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+        </svg>
+        <p className="text-red-600 text-xs font-medium">{error}</p>
+      </div>
+    )}
+  </div>
+);
+
+const inputCls = (error?: string) =>
+  `w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm transition-colors ${
+    error ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200' : 'border-gray-300'
+  }`;
+
+// Fonction pour calculer les prochaines dates
+function getNextDates(startDate: Date, frequency: string, count = 5): Date[] {
+  const dates: Date[] = [];
+  let current = new Date(startDate);
+  
+  for (let i = 0; i < count; i++) {
+    dates.push(new Date(current));
+    switch (frequency) {
+      case 'daily':
+        current.setDate(current.getDate() + 1);
+        break;
+      case 'weekly':
+        current.setDate(current.getDate() + 7);
+        break;
+      case 'monthly':
+        current.setMonth(current.getMonth() + 1);
+        break;
+      case 'quarterly':
+        current.setMonth(current.getMonth() + 3);
+        break;
+      case 'yearly':
+        current.setFullYear(current.getFullYear() + 1);
+        break;
+    }
+  }
+  return dates;
+}
+
+// Fonction pour vérifier si une date est dans moins de 7 jours
+function isWithinSevenDays(date: Date): boolean {
+  const now = new Date();
+  const diffTime = date.getTime() - now.getTime();
+  const diffDays = diffTime / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays <= 7;
 }
 
 interface Props {
@@ -36,27 +88,39 @@ export default function RecurringInvoiceModal({ businessId, recurringInvoice, on
 
   const getInitialValues = (): RecurringInvoiceFormValues => {
     if (isEdit) {
+      // Calculate amounts from existing data
+      const amount = Number(recurringInvoice.amount) || 0;
+      const taxRate = Number(recurringInvoice.tax_rate) || 19;
+      const subtotal_ht = round3(amount);
+      const tax_amount = round3(subtotal_ht * (taxRate / 100));
+      
       return {
         client_id: recurringInvoice.client_id || '',
-        description: recurringInvoice.description || '',
-        frequency: recurringInvoice.frequency || RecurringFrequency.MONTHLY,
+        frequency: recurringInvoice.frequency || 'monthly',
         start_date: recurringInvoice.start_date?.split('T')[0] || new Date().toISOString().split('T')[0],
         end_date: recurringInvoice.end_date?.split('T')[0] || '',
-        amount: Number(recurringInvoice.amount) || 0,
-        tax_rate: Number(recurringInvoice.tax_rate) || 19,
+        next_invoice_date: recurringInvoice.next_invoice_date?.split('T')[0] || new Date().toISOString().split('T')[0],
+        subtotal_ht,
+        tax_amount,
+        timbre_fiscal: 1.000,
+        description: recurringInvoice.description || '',
         notes: recurringInvoice.notes || '',
+        auto_send: recurringInvoice.auto_send || false,
       };
     }
 
     return {
       client_id: '',
-      description: '',
-      frequency: RecurringFrequency.MONTHLY,
+      frequency: 'monthly',
       start_date: new Date().toISOString().split('T')[0],
       end_date: '',
-      amount: 0,
-      tax_rate: 19,
+      next_invoice_date: new Date().toISOString().split('T')[0],
+      subtotal_ht: 0,
+      tax_amount: 0,
+      timbre_fiscal: 1.000,
+      description: '',
       notes: '',
+      auto_send: false,
     };
   };
 
@@ -64,30 +128,52 @@ export default function RecurringInvoiceModal({ businessId, recurringInvoice, on
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<RecurringInvoiceFormValues>({
+    resolver: zodResolver(recurringInvoiceSchema),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: getInitialValues(),
   });
 
-  const watchedAmount = watch('amount') || 0;
-  const watchedTaxRate = watch('tax_rate') || 0;
+  const watchedSubtotalHt = watch('subtotal_ht') || 0;
+  const watchedTaxAmount = watch('tax_amount') || 0;
+  const watchedStartDate = watch('start_date');
+  const watchedFrequency = watch('frequency');
 
-  const subtotal_ht = round3(Number(watchedAmount));
-  const tax_amount = round3(subtotal_ht * (Number(watchedTaxRate) / 100));
+  // Calculer les prochaines dates
+  const nextDates = useMemo(() => {
+    if (!watchedStartDate) return [];
+    try {
+      const startDate = new Date(watchedStartDate);
+      if (isNaN(startDate.getTime())) return [];
+      return getNextDates(startDate, watchedFrequency, 5);
+    } catch {
+      return [];
+    }
+  }, [watchedStartDate, watchedFrequency]);
+
+  // Calcul des totaux
+  const subtotal_ht = round3(Number(watchedSubtotalHt));
+  const tax_amount = round3(Number(watchedTaxAmount));
   const total_ttc = round3(subtotal_ht + tax_amount + TIMBRE_FISCAL);
 
   const onSubmit = async (values: RecurringInvoiceFormValues) => {
     try {
       setError(null);
-      const payload = {
+      const payload: any = {
         client_id: values.client_id,
-        description: values.description,
         frequency: values.frequency,
         start_date: values.start_date,
         end_date: values.end_date || undefined,
-        amount: Number(values.amount),
-        tax_rate: Number(values.tax_rate),
+        next_invoice_date: values.next_invoice_date,
+        subtotal_ht: Number(values.subtotal_ht),
+        tax_amount: Number(values.tax_amount),
+        timbre_fiscal: Number(values.timbre_fiscal),
+        description: values.description,
         notes: values.notes || undefined,
+        auto_send: values.auto_send,
       };
 
       if (isEdit) {
@@ -105,7 +191,7 @@ export default function RecurringInvoiceModal({ businessId, recurringInvoice, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold text-gray-900">
             {isEdit ? 'Modifier la facture récurrente' : 'Nouvelle Facture Récurrente'}
           </h2>
@@ -121,15 +207,10 @@ export default function RecurringInvoiceModal({ businessId, recurringInvoice, on
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Client <span className="text-red-500">*</span>
-            </label>
+          <Field label="Client" error={errors.client_id?.message} required>
             <select
-              {...register('client_id', { required: 'Client requis' })}
-              className={`w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 ${
-                errors.client_id ? 'border-red-400 bg-red-50' : 'border-gray-300'
-              }`}
+              {...register('client_id')}
+              className={inputCls(errors.client_id?.message)}
             >
               <option value="">Sélectionner un client</option>
               {clientsData?.clients?.map((client) => (
@@ -138,117 +219,137 @@ export default function RecurringInvoiceModal({ businessId, recurringInvoice, on
                 </option>
               ))}
             </select>
-            {errors.client_id && (
-              <p className="text-red-500 text-xs mt-1">{errors.client_id.message}</p>
-            )}
-          </div>
+          </Field>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description <span className="text-red-500">*</span>
-            </label>
+          <Field label="Description" error={errors.description?.message} required>
             <input
               type="text"
-              {...register('description', { required: 'Description requise' })}
+              {...register('description')}
               placeholder="Ex: Abonnement mensuel"
-              className={`w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 ${
-                errors.description ? 'border-red-400 bg-red-50' : 'border-gray-300'
-              }`}
+              className={inputCls(errors.description?.message)}
             />
-            {errors.description && (
-              <p className="text-red-500 text-xs mt-1">{errors.description.message}</p>
-            )}
-          </div>
+          </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fréquence <span className="text-red-500">*</span>
-              </label>
+            <Field label="Fréquence" error={errors.frequency?.message} required>
               <select
-                {...register('frequency', { required: 'Fréquence requise' })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                {...register('frequency')}
+                className={inputCls(errors.frequency?.message)}
               >
-                {Object.entries(RECURRING_FREQUENCY_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
+                <option value="monthly">Mensuel</option>
+                <option value="quarterly">Trimestriel</option>
+                <option value="yearly">Annuel</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Montant HT <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                step="0.001"
-                {...register('amount', { required: 'Montant requis', valueAsNumber: true })}
-                className={`w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 ${
-                  errors.amount ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                }`}
-              />
-              {errors.amount && (
-                <p className="text-red-500 text-xs mt-1">{errors.amount.message}</p>
-              )}
-            </div>
+            </Field>
+
+            <Field label="Envoi automatique" error={errors.auto_send?.message}>
+              <div className="flex items-center h-full">
+                <input
+                  type="checkbox"
+                  {...register('auto_send')}
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Envoyer automatiquement au client
+                </label>
+              </div>
+            </Field>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date de début <span className="text-red-500">*</span>
-              </label>
+            <Field label="Date de début" error={errors.start_date?.message} required>
               <input
                 type="date"
-                {...register('start_date', { required: 'Date de début requise' })}
-                className={`w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 ${
-                  errors.start_date ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                }`}
+                {...register('start_date')}
+                className={inputCls(errors.start_date?.message)}
               />
-              {errors.start_date && (
-                <p className="text-red-500 text-xs mt-1">{errors.start_date.message}</p>
+              
+              {/* Prévisualisation des 5 prochaines dates */}
+              {nextDates.length > 0 && (
+                <div className="mt-3">
+                  <div className="flex items-center gap-1 text-xs text-gray-600 mb-2">
+                    <Calendar className="h-3 w-3" />
+                    <span>Prochaines générations :</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {nextDates.map((date, idx) => {
+                      const isUrgent = isWithinSevenDays(date);
+                      return (
+                        <span
+                          key={idx}
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            isUrgent
+                              ? 'bg-orange-100 text-orange-700 border border-orange-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-200'
+                          }`}
+                        >
+                          {date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date de fin (optionnelle)
-              </label>
+            </Field>
+
+            <Field label="Date de fin" error={errors.end_date?.message}>
               <input
                 type="date"
                 {...register('end_date')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                className={inputCls(errors.end_date?.message)}
               />
               <p className="text-xs text-gray-500 mt-1">
                 Laisser vide pour une récurrence illimitée
               </p>
-            </div>
+            </Field>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Taux de TVA (%)
-            </label>
-            <select
-              {...register('tax_rate', { valueAsNumber: true })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="0">0%</option>
-              <option value="7">7%</option>
-              <option value="13">13%</option>
-              <option value="19">19%</option>
-            </select>
+          <Field label="Prochaine facture" error={errors.next_invoice_date?.message} required>
+            <input
+              type="date"
+              {...register('next_invoice_date')}
+              className={inputCls(errors.next_invoice_date?.message)}
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Sous-total HT (TND)" error={errors.subtotal_ht?.message} required>
+              <input
+                type="number"
+                step="0.001"
+                {...register('subtotal_ht', { valueAsNumber: true })}
+                className={inputCls(errors.subtotal_ht?.message)}
+              />
+            </Field>
+
+            <Field label="Montant TVA (TND)" error={errors.tax_amount?.message} required>
+              <input
+                type="number"
+                step="0.001"
+                {...register('tax_amount', { valueAsNumber: true })}
+                className={inputCls(errors.tax_amount?.message)}
+              />
+            </Field>
           </div>
+
+          <Field label="Timbre fiscal (TND)" error={errors.timbre_fiscal?.message}>
+            <input
+              type="number"
+              step="0.001"
+              {...register('timbre_fiscal', { valueAsNumber: true })}
+              className={inputCls(errors.timbre_fiscal?.message)}
+            />
+          </Field>
 
           {/* Totaux */}
           <div className="bg-gray-50 rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Montant HT</span>
-              <span className="font-medium">{subtotal_ht.toFixed(3)} DT</span>
+              <span className="text-gray-600">Net HT</span>
+              <span className="font-medium">{isNaN(subtotal_ht) ? '0.000' : subtotal_ht.toFixed(3)} DT</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">TVA ({watchedTaxRate}%)</span>
-              <span className="font-medium">{tax_amount.toFixed(3)} DT</span>
+              <span className="text-gray-600">TVA</span>
+              <span className="font-medium">{isNaN(tax_amount) ? '0.000' : tax_amount.toFixed(3)} DT</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Timbre fiscal</span>
@@ -256,19 +357,18 @@ export default function RecurringInvoiceModal({ businessId, recurringInvoice, on
             </div>
             <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
               <span>Total TTC</span>
-              <span className="text-indigo-600">{total_ttc.toFixed(3)} DT</span>
+              <span className="text-indigo-600">{isNaN(total_ttc) ? '0.000' : total_ttc.toFixed(3)} DT</span>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <Field label="Notes" error={errors.notes?.message}>
             <textarea
               {...register('notes')}
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+              className={inputCls(errors.notes?.message)}
               placeholder="Notes additionnelles..."
             />
-          </div>
+          </Field>
 
           <div className="flex gap-3 pt-4">
             <button

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { getMyBusinesses } from '../../api/business.api';
 import { toast } from 'sonner';
+import { getAssetUrl } from '@/config/api.config';
 
 interface Address {
   street?: string;
@@ -96,7 +97,7 @@ export default function BusinessView() {
                 <div className="h-20 w-20 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden border-2 border-gray-100 shadow-sm">
                   {business.logo ? (
                     <img
-                      src={`http://localhost:3001${business.logo}`}
+                      src={getAssetUrl(business.logo)}
                       alt={business.name}
                       className="h-full w-full object-cover"
                     />

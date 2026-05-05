@@ -1,5 +1,5 @@
 // src/components/sales/SalesInvoiceDetailModal.tsx
-import { X, Package, ChevronDown, ChevronUp, Edit, Trash2, Send, DollarSign, AlertCircle, XCircle } from 'lucide-react';
+import { X, Package, ChevronDown, ChevronUp, Edit, Trash2, Send, DollarSign, AlertCircle, XCircle, FileText, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { SalesInvoice, SALES_INVOICE_STATUS_COLORS, SALES_INVOICE_STATUS_LABELS, SalesInvoiceStatus } from '@/types/sales-invoice';
 import {
@@ -12,9 +12,10 @@ import {
 } from '@/hooks/useSalesInvoices';
 import SalesInvoiceModal from './SalesInvoiceModal';
 import ConfirmModal from '../ui/ConfirmModal';
-import PDFButton from '../purchases/PDFButton';
+import { ActionButton, ActionSection } from '../ui/ActionButton';
 import { printSalesInvoice } from '@/utils/sales-invoice-print';
 import { useAuth } from '@/hooks/useAuth';
+import { getBusinessInfo } from '@/utils/business-info.utils';
 
 interface Props {
   invoice: SalesInvoice;
@@ -163,54 +164,107 @@ export default function SalesInvoiceDetailModal({ invoice: initialInvoice, busin
           </div>
           )}
 
-          <div className="p-6 border-t border-gray-200 space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <PDFButton
-                onClick={() => printSalesInvoice(invoice, (user as any)?.business?.name || 'Entreprise', (user as any)?.business?.matricule_fiscal, (user as any)?.business?.address)}
-                label="Télécharger PDF"
-                variant="ghost"
-              />
-              {canEdit && (
-                <button onClick={() => setEditOpen(true)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-1">
-                  <Edit className="h-4 w-4" />
-                  Modifier
-                </button>
+          {/* Footer - Actions */}
+          <div className="p-6 border-t border-gray-200 bg-gray-50">
+            <div className="space-y-4">
+              
+              {/* Section: Documents & Communication */}
+              <ActionSection title="Documents & Communication">
+                <ActionButton
+                  icon={FileText}
+                  label="Télécharger PDF"
+                  description="Générer le document"
+                  onClick={async () => {
+                    const info = await getBusinessInfo(user);
+                    printSalesInvoice(invoice, info.businessName, info.businessMF, info.businessAddress);
+                  }}
+                  variant="danger"
+                />
+
+                {canSend && (
+                  <ActionButton
+                    icon={Mail}
+                    label="Envoyer au client"
+                    description={invoice.client?.email || 'Email client'}
+                    onClick={() => send.mutate(invoice.id)}
+                    variant="success"
+                    loading={send.isPending}
+                  />
+                )}
+              </ActionSection>
+
+              {/* Section: Gestion de la facture */}
+              {(canEdit || canMarkPartiallyPaid || canMarkPaid || canMarkOverdue) && (
+                <ActionSection title="Gestion de la facture">
+                  {canEdit && (
+                    <ActionButton
+                      icon={Edit}
+                      label="Modifier"
+                      description="Éditer les détails"
+                      onClick={() => setEditOpen(true)}
+                      variant="secondary"
+                    />
+                  )}
+
+                  {canMarkPartiallyPaid && (
+                    <ActionButton
+                      icon={DollarSign}
+                      label="Partiellement payé"
+                      description="Paiement partiel reçu"
+                      onClick={() => markPartiallyPaid.mutate(invoice.id)}
+                      variant="warning"
+                      loading={markPartiallyPaid.isPending}
+                    />
+                  )}
+
+                  {canMarkPaid && (
+                    <ActionButton
+                      icon={DollarSign}
+                      label="Marquer payé"
+                      description="Paiement complet reçu"
+                      onClick={() => markPaid.mutate(invoice.id)}
+                      variant="success"
+                      loading={markPaid.isPending}
+                    />
+                  )}
+
+                  {canMarkOverdue && (
+                    <ActionButton
+                      icon={AlertCircle}
+                      label="Marquer en retard"
+                      description="Échéance dépassée"
+                      onClick={() => markOverdue.mutate(invoice.id)}
+                      variant="warning"
+                      loading={markOverdue.isPending}
+                    />
+                  )}
+                </ActionSection>
               )}
-              {canSend && (
-                <button onClick={() => send.mutate(invoice.id)} disabled={send.isPending} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1">
-                  <Send className="h-4 w-4" />
-                  Envoyer au client
-                </button>
-              )}
-              {canMarkPartiallyPaid && (
-                <button onClick={() => markPartiallyPaid.mutate(invoice.id)} disabled={markPartiallyPaid.isPending} className="px-4 py-2 bg-yellow-600 text-white rounded-lg text-sm hover:bg-yellow-700 disabled:opacity-50 flex items-center gap-1">
-                  <DollarSign className="h-4 w-4" />
-                  Partiellement payé
-                </button>
-              )}
-              {canMarkPaid && (
-                <button onClick={() => markPaid.mutate(invoice.id)} disabled={markPaid.isPending} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-1">
-                  <DollarSign className="h-4 w-4" />
-                  Marquer payé
-                </button>
-              )}
-              {canMarkOverdue && (
-                <button onClick={() => markOverdue.mutate(invoice.id)} disabled={markOverdue.isPending} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50 flex items-center gap-1">
-                  <AlertCircle className="h-4 w-4" />
-                  Marquer en retard
-                </button>
-              )}
-              {canCancel && (
-                <button onClick={() => cancel.mutate(invoice.id)} disabled={cancel.isPending} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 flex items-center gap-1">
-                  <XCircle className="h-4 w-4" />
-                  Annuler
-                </button>
-              )}
-              {canDelete && (
-                <button onClick={() => setDeleteConfirm(true)} className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 flex items-center gap-1 ml-auto">
-                  <Trash2 className="h-4 w-4" />
-                  Supprimer
-                </button>
+
+              {/* Section: Actions critiques */}
+              {(canCancel || canDelete) && (
+                <ActionSection title="Actions critiques" variant="danger">
+                  {canCancel && (
+                    <ActionButton
+                      icon={XCircle}
+                      label="Annuler"
+                      description="Annuler la facture"
+                      onClick={() => cancel.mutate(invoice.id)}
+                      variant="warning"
+                      loading={cancel.isPending}
+                    />
+                  )}
+
+                  {canDelete && (
+                    <ActionButton
+                      icon={Trash2}
+                      label="Supprimer"
+                      description="Supprimer définitivement"
+                      onClick={() => setDeleteConfirm(true)}
+                      variant="danger"
+                    />
+                  )}
+                </ActionSection>
               )}
             </div>
           </div>

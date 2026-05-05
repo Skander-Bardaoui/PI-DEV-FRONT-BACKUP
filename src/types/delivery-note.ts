@@ -21,7 +21,7 @@ export const DELIVERY_NOTE_STATUS_COLORS: Record<DeliveryNoteStatus, string> = {
 export interface DeliveryNoteItem {
   id: string;
   deliveryNoteId: string;
-  productId: string | null;
+  productId: string;
   description: string;
   quantity: number;
   deliveredQuantity: number;
@@ -46,7 +46,7 @@ export interface DeliveryNote {
 }
 
 export interface CreateDeliveryNoteItemDto {
-  productId?: string;
+  productId: string;
   description: string;
   quantity: number;
   deliveredQuantity: number;

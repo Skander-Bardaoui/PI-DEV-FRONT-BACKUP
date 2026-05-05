@@ -23,6 +23,7 @@ export interface GoodsReceipt {
   receipt_date:   string;
   notes:          string | null;
   received_by:    string;
+  is_invoiced:    boolean;  // Indique si ce BR a déjà été facturé
   created_at:     string;
   items:          GoodsReceiptItem[];
 }

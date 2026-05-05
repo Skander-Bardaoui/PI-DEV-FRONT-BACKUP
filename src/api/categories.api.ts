@@ -51,4 +51,27 @@ export const categoriesApi = {
       withCredentials: true,
     });
   },
+
+  softDelete: async (businessId: string, id: string): Promise<Category> => {
+    const response = await axios.delete(`${API_URL}/businesses/${businessId}/categories/${id}`, {
+      withCredentials: true,
+    });
+    return response.data;
+  },
+
+  restore: async (businessId: string, id: string): Promise<Category> => {
+    const response = await axios.post(
+      `${API_URL}/businesses/${businessId}/categories/${id}/restore`,
+      {},
+      { withCredentials: true },
+    );
+    return response.data;
+  },
+
+  getArchived: async (businessId: string): Promise<Category[]> => {
+    const response = await axios.get(`${API_URL}/businesses/${businessId}/categories/archived`, {
+      withCredentials: true,
+    });
+    return response.data;
+  },
 };

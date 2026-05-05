@@ -1,0 +1,158 @@
+═══════════════════════════════════════════════════════════════
+  🧪 GUIDE RAPIDE - TESTS D'ACCESSIBILITÉ
+═══════════════════════════════════════════════════════════════
+
+📋 MÉTHODE 1: TEST CLAVIER (5 minutes)
+───────────────────────────────────────────────────────────────
+1. Ouvrez l'application: http://localhost:5173
+2. N'utilisez QUE le clavier (pas de souris!)
+3. Testez:
+   ✓ Tab/Shift+Tab: Navigation
+   ✓ Enter/Space: Activer boutons
+   ✓ Échap: Fermer modals
+   ✓ Alt+1 à Alt+5: Navigation rapide
+   ✓ Ctrl+K: Recherche
+
+4. Vérifiez:
+   ✓ Bordures bleues visibles (focus rings)
+   ✓ Ordre de navigation logique
+   ✓ Tous les boutons accessibles
+
+
+📋 MÉTHODE 2: CHROME DEVTOOLS (10 minutes)
+───────────────────────────────────────────────────────────────
+A. Inspecteur d'Accessibilité:
+   1. F12 > Onglet "Elements"
+   2. En bas: cliquez "Accessibility"
+   3. Inspectez un bouton
+   4. Vérifiez: Name, Role, Properties
+
+B. Lighthouse Audit:
+   1. F12 > Onglet "Lighthouse"
+   2. Cochez "Accessibility"
+   3. Cliquez "Analyze page load"
+   4. Score cible: > 90/100
+
+
+📋 MÉTHODE 3: SCRIPT AUTOMATIQUE (2 minutes)
+───────────────────────────────────────────────────────────────
+1. Ouvrez l'application
+2. F12 > Console
+3. Copiez/collez le contenu de: test-aria-attributes.js
+4. Appuyez sur Enter
+5. Lisez les résultats
+
+
+📋 MÉTHODE 4: LECTEUR D'ÉCRAN (15 minutes)
+───────────────────────────────────────────────────────────────
+Windows - NVDA:
+   1. Téléchargez: https://www.nvaccess.org/download/
+   2. Installez et lancez
+   3. Naviguez avec Tab
+   4. NVDA annonce: nom, rôle, état
+   5. Ctrl+Alt+N: Quitter
+
+Mac - VoiceOver:
+   1. Cmd+F5: Activer
+   2. Ctrl+Option+Flèches: Naviguer
+   3. Ctrl+Option+Space: Activer
+   4. Cmd+F5: Désactiver
+
+
+📋 MÉTHODE 5: EXTENSIONS CHROME (Recommandé)
+───────────────────────────────────────────────────────────────
+Installez ces extensions:
+
+1. axe DevTools (Le meilleur)
+   https://chrome.google.com/webstore/detail/lhdoppojpmngadmnindnejefpokejbdd
+   Usage: DevTools > axe DevTools > Scan All
+
+2. WAVE Evaluation Tool
+   https://chrome.google.com/webstore/detail/jbbplnpkjmmeebjpijfedlgcdilocofh
+   Usage: Cliquez l'icône WAVE
+
+3. Accessibility Insights
+   https://chrome.google.com/webstore/detail/pbjjkligggfmakdaogkfomddhfmpjeni
+   Usage: Icône > FastPass
+
+
+═══════════════════════════════════════════════════════════════
+  ✅ CHECKLIST RAPIDE
+═══════════════════════════════════════════════════════════════
+
+Navigation Clavier:
+☐ Tous les boutons accessibles avec Tab
+☐ Focus rings visibles (bordures bleues)
+☐ Ordre de navigation logique
+☐ Échap ferme les modals
+☐ Alt+1-5 fonctionnent
+☐ Ctrl+K active la recherche
+
+Attributs ARIA:
+☐ Boutons icônes ont aria-label
+☐ Menus ont aria-expanded
+☐ Modals ont role="dialog"
+☐ Notifications ont role="status"
+☐ Navigation a role="navigation"
+☐ Liens actifs ont aria-current="page"
+
+Lecteur d'Écran:
+☐ Annonce le nom des éléments
+☐ Annonce le rôle (bouton, menu, etc.)
+☐ Annonce l'état (ouvert, fermé)
+☐ Annonce les notifications
+☐ Annonce le nombre de notifications
+
+
+═══════════════════════════════════════════════════════════════
+  📊 SCORES CIBLES
+═══════════════════════════════════════════════════════════════
+
+✅ Lighthouse Accessibility: > 90/100
+✅ axe DevTools: 0 erreurs critiques
+✅ WAVE: 0 erreurs
+✅ Navigation clavier: 100% accessible
+✅ Lecteur d'écran: Toutes annonces correctes
+
+
+═══════════════════════════════════════════════════════════════
+  📚 DOCUMENTATION COMPLÈTE
+═══════════════════════════════════════════════════════════════
+
+Ouvrez dans le navigateur:
+file:///[CHEMIN]/PI-DEV-FRONT/test-accessibility.html
+
+Ou double-cliquez sur: test-accessibility.html
+
+
+═══════════════════════════════════════════════════════════════
+  🎯 TESTS PRIORITAIRES (Si peu de temps)
+═══════════════════════════════════════════════════════════════
+
+1. Test clavier (5 min) - OBLIGATOIRE
+2. Lighthouse audit (5 min) - OBLIGATOIRE
+3. Script automatique (2 min) - RECOMMANDÉ
+4. Extension axe DevTools (10 min) - RECOMMANDÉ
+5. Lecteur d'écran (15 min) - OPTIONNEL
+
+
+═══════════════════════════════════════════════════════════════
+  💡 AIDE RAPIDE
+═══════════════════════════════════════════════════════════════
+
+Problème: Focus rings invisibles
+Solution: Vérifiez keyboard-navigation.css est importé
+
+Problème: Lecteur d'écran ne lit rien
+Solution: Vérifiez aria-label sur les boutons
+
+Problème: Échap ne ferme pas les modals
+Solution: Vérifiez useKeyboardShortcuts est activé
+
+Problème: Score Lighthouse < 90
+Solution: Lancez axe DevTools pour détails
+
+
+═══════════════════════════════════════════════════════════════
+  ✨ Bon test!
+═══════════════════════════════════════════════════════════════

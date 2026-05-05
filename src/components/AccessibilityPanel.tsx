@@ -1,6 +1,8 @@
 // src/components/AccessibilityPanel.tsx
-import { X, Plus, Minus, RotateCcw, Eye, Type, Contrast, MousePointer, BookOpen, Zap, Link as LinkIcon, Hand, Volume2, Target } from 'lucide-react';
+import { X, Plus, Minus, RotateCcw, Eye, Type, Contrast, MousePointer, BookOpen, Zap, Link as LinkIcon, Hand, Volume2, Target, Palette } from 'lucide-react';
 import { useAccessibility } from '../context/AccessibilityContext';
+import { useReadingMode } from '../hooks/useReadingMode';
+import { useColorTheme, ColorTheme } from '../hooks/useColorTheme';
 
 export default function AccessibilityPanel() {
   const {
@@ -8,6 +10,9 @@ export default function AccessibilityPanel() {
     isAccessibilityPanelOpen, toggleAccessibilityPanel,
     isFingerScrollActive, toggleFingerScroll,
   } = useAccessibility();
+
+  const { isReadingMode, toggleReadingMode } = useReadingMode();
+  const { colorTheme, changeColorTheme } = useColorTheme();
 
   if (!isAccessibilityPanelOpen) return null;
 
@@ -27,24 +32,22 @@ export default function AccessibilityPanel() {
         aria-labelledby="accessibility-title"
         aria-modal="true"
       >
-        {/* Header avec gradient */}
-        <div className="sticky top-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white p-6 shadow-lg z-10">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 p-6 shadow-sm z-10">
           <div className="flex items-center justify-between mb-2">
-            <h2 id="accessibility-title" className="text-2xl font-bold flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <Eye className="h-6 w-6" />
-              </div>
+            <h2 id="accessibility-title" className="text-xl font-bold text-gray-900 flex items-center gap-3">
+              <Eye className="h-6 w-6 text-indigo-600" />
               Accessibilité
             </h2>
             <button
               onClick={toggleAccessibilityPanel}
-              className="p-2 hover:bg-white/20 rounded-lg transition-all"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-all text-gray-400 hover:text-gray-600"
               aria-label="Fermer le panneau d'accessibilité"
             >
               <X className="h-6 w-6" />
             </button>
           </div>
-          <p className="text-indigo-100 text-sm">Personnalisez votre expérience de navigation</p>
+          <p className="text-sm text-gray-600">Personnalisez votre expérience de navigation</p>
         </div>
 
         <div className="p-6 space-y-6">
@@ -102,6 +105,42 @@ export default function AccessibilityPanel() {
                   <div className={`text-sm font-semibold ${settings.contrast === c ? 'text-indigo-600' : 'text-gray-700'}`}>
                     {c === 'normal' ? 'Normal' : c === 'high' ? 'Élevé' : 'Sombre'}
                   </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Section: Thèmes de Couleur (Daltonisme) ───────────────── */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
+            <label className="flex items-center gap-2 text-base font-semibold text-gray-900 mb-4">
+              <div className="p-2 bg-pink-100 rounded-lg">
+                <Palette className="h-5 w-5 text-pink-600" />
+              </div>
+              Thème de Couleur
+            </label>
+            <p className="text-xs text-gray-600 mb-4">Palettes adaptées au daltonisme</p>
+            <div className="space-y-2">
+              {([
+                { value: 'normal', label: 'Normal', desc: 'Couleurs standard' },
+                { value: 'protanopia', label: 'Protanopie', desc: 'Rouge-vert (rouge)' },
+                { value: 'deuteranopia', label: 'Deutéranopie', desc: 'Rouge-vert (vert)' },
+                { value: 'tritanopia', label: 'Tritanopie', desc: 'Bleu-jaune' },
+                { value: 'monochrome', label: 'Monochrome', desc: 'Noir et blanc' },
+              ] as const).map(theme => (
+                <button
+                  key={theme.value}
+                  onClick={() => changeColorTheme(theme.value)}
+                  className={`w-full p-3 border-2 rounded-xl transition-all text-left ${
+                    colorTheme === theme.value
+                      ? 'border-indigo-500 bg-indigo-50 shadow-md'
+                      : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                  }`}
+                  aria-pressed={colorTheme === theme.value}
+                >
+                  <div className={`text-sm font-semibold ${colorTheme === theme.value ? 'text-indigo-600' : 'text-gray-700'}`}>
+                    {theme.label}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">{theme.desc}</div>
                 </button>
               ))}
             </div>
@@ -176,7 +215,15 @@ export default function AccessibilityPanel() {
             <h3 className="text-base font-semibold text-gray-900 mb-4">Options avancées</h3>
             <div className="space-y-3">
               <ModernToggle
-                icon={<Target className="h-5 w-5" />}
+                icon={Target}
+                label="Mode Simplifié"
+                description="Interface ultra-simple avec gros boutons et moins d'options"
+                checked={settings.simplifiedMode}
+                onChange={v => updateSetting('simplifiedMode', v)}
+                color="teal"
+              />
+              <ModernToggle
+                icon={Target}
                 label="Mode Focus"
                 description="Assombrit tout sauf l'élément actif"
                 checked={settings.focusMode}
@@ -184,7 +231,15 @@ export default function AccessibilityPanel() {
                 color="orange"
               />
               <ModernToggle
-                icon={<Volume2 className="h-5 w-5" />}
+                icon={BookOpen}
+                label="Mode Lecture"
+                description="Simplifie la page pour une lecture confortable"
+                checked={isReadingMode}
+                onChange={toggleReadingMode}
+                color="yellow"
+              />
+              <ModernToggle
+                icon={Volume2}
                 label="Lecteur vocal"
                 description="Lit le texte sélectionné à voix haute"
                 checked={settings.textToSpeech}
@@ -192,7 +247,7 @@ export default function AccessibilityPanel() {
                 color="purple"
               />
               <ModernToggle
-                icon={<Hand className="h-5 w-5" />}
+                icon={Hand}
                 label="Contrôle par geste"
                 description="Navigation avec les mains"
                 checked={isFingerScrollActive}
@@ -200,7 +255,7 @@ export default function AccessibilityPanel() {
                 color="blue"
               />
               <ModernToggle
-                icon={<BookOpen className="h-5 w-5" />}
+                icon={BookOpen}
                 label="Police dyslexie"
                 description="Police adaptée pour la dyslexie"
                 checked={settings.dyslexiaFont}
@@ -208,7 +263,7 @@ export default function AccessibilityPanel() {
                 color="green"
               />
               <ModernToggle
-                icon={<LinkIcon className="h-5 w-5" />}
+                icon={LinkIcon}
                 label="Surligner les liens"
                 description="Rend les liens plus visibles"
                 checked={settings.highlightLinks}
@@ -216,7 +271,7 @@ export default function AccessibilityPanel() {
                 color="indigo"
               />
               <ModernToggle
-                icon={<Zap className="h-5 w-5" />}
+                icon={Zap}
                 label="Réduire les animations"
                 description="Moins de mouvements à l'écran"
                 checked={settings.reduceAnimations}
@@ -241,15 +296,15 @@ export default function AccessibilityPanel() {
 }
 
 interface ModernToggleProps {
-  icon:         React.ReactNode;
+  icon:         React.ComponentType<{ className?: string }>;
   label:        string;
   description:  string;
   checked:      boolean;
   onChange:     (checked: boolean) => void;
-  color:        'orange' | 'purple' | 'blue' | 'green' | 'indigo' | 'yellow';
+  color:        'orange' | 'purple' | 'blue' | 'green' | 'indigo' | 'yellow' | 'teal' | 'pink';
 }
 
-function ModernToggle({ icon, label, description, checked, onChange, color }: ModernToggleProps) {
+function ModernToggle({ icon: Icon, label, description, checked, onChange, color }: ModernToggleProps) {
   const colorClasses = {
     orange:  { bg: 'bg-orange-100',  text: 'text-orange-600',  border: 'border-orange-500',  activeBg: 'bg-orange-500'  },
     purple:  { bg: 'bg-purple-100',  text: 'text-purple-600',  border: 'border-purple-500',  activeBg: 'bg-purple-500'  },
@@ -257,6 +312,8 @@ function ModernToggle({ icon, label, description, checked, onChange, color }: Mo
     green:   { bg: 'bg-green-100',   text: 'text-green-600',   border: 'border-green-500',   activeBg: 'bg-green-500'   },
     indigo:  { bg: 'bg-indigo-100',  text: 'text-indigo-600',  border: 'border-indigo-500',  activeBg: 'bg-indigo-500'  },
     yellow:  { bg: 'bg-yellow-100',  text: 'text-yellow-600',  border: 'border-yellow-500',  activeBg: 'bg-yellow-500'  },
+    teal:    { bg: 'bg-teal-100',    text: 'text-teal-600',    border: 'border-teal-500',    activeBg: 'bg-teal-500'    },
+    pink:    { bg: 'bg-pink-100',    text: 'text-pink-600',    border: 'border-pink-500',    activeBg: 'bg-pink-500'    },
   };
 
   const colors = colorClasses[color];
@@ -268,9 +325,7 @@ function ModernToggle({ icon, label, description, checked, onChange, color }: Mo
         : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
     }`}>
       <div className={`p-2 rounded-lg ${checked ? colors.bg : 'bg-gray-100'}`}>
-        <div className={checked ? colors.text : 'text-gray-400'}>
-          {icon}
-        </div>
+        <Icon className={`h-5 w-5 ${checked ? colors.text : 'text-gray-400'}`} />
       </div>
       <div className="flex-1 min-w-0">
         <div className={`text-sm font-semibold ${checked ? colors.text : 'text-gray-700'}`}>

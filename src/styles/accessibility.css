@@ -393,3 +393,51 @@ nav {
   overflow-y: auto !important;
   max-height: 100%;
 }
+
+/* ── Main Content Scrolling ───────────────────────────────── */
+#main-content {
+  overflow-y: auto;
+  max-height: calc(100vh - 4rem); /* 4rem = header height */
+  scroll-behavior: smooth;
+}
+
+/* Ensure main content is scrollable in all contexts */
+main {
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar for main content */
+#main-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+#main-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#main-content::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 5px;
+}
+
+#main-content::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+[data-contrast="dark"] #main-content::-webkit-scrollbar-thumb {
+  background: #404040;
+}
+
+[data-contrast="dark"] #main-content::-webkit-scrollbar-thumb:hover {
+  background: #505050;
+}
+
+#main-content {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+[data-contrast="dark"] #main-content {
+  scrollbar-color: #404040 transparent;
+}

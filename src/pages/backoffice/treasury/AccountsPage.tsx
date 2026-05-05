@@ -1,5 +1,5 @@
 // src/pages/backoffice/treasury/AccountsPage.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Plus,
   Building2,
@@ -12,25 +12,60 @@ import {
   TrendingDown,
   RefreshCw,
   ArrowRightLeft,
+  DollarSign,
 } from 'lucide-react';
 import { useAccounts } from '@/hooks/useAccounts';
 import { useTransfers } from '@/hooks/useTransfers';
 import { Account, CreateAccountDto, CreateTransferDto } from '@/types/treasury';
+import { createDeposit, CreateDepositDto } from '@/api/treasury.api';
 import AccountModal from '@/components/treasury/AccountModal';
 import TransferModal from '@/components/treasury/TransferModal';
+import DepositModal from '@/components/treasury/DepositModal';
+import CashFlowForecast from '@/components/treasury/CashFlowForecast';
+import { SummaryCardSkeleton, AccountCardSkeleton } from '@/components/treasury/SkeletonLoaders';
+import toast from 'react-hot-toast';
+import { useAIAccess } from '@/hooks/useAIAccess';
+
+// Helper: always returns a displayable string from any API error shape
+function extractErrorMessage(e: any, fallback: string): string {
+  const data = e?.response?.data;
+  if (!data) return fallback;
+  if (typeof data.message === 'string') return data.message;
+  if (Array.isArray(data.message)) return data.message.join(', ');
+  if (typeof data === 'string') return data;
+  return fallback;
+}
 
 export default function AccountsPage() {
   const { accounts, loading, error, fetchAccounts, createAccount, updateAccount, toggleActive } =
     useAccounts();
-  const { transfer, error: transferError } = useTransfers();
+  const { transfer } = useTransfers();
+  const { hasAIAccess, loading: aiLoading } = useAIAccess();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | { field: string; message: string }[] | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [preselectedFromId, setPreselectedFromId] = useState<string | null>(null);
+
+  const [depositModalOpen, setDepositModalOpen] = useState(false);
+  const [preselectedAccountId, setPreselectedAccountId] = useState<string | null>(null);
+
+  const [showSkeleton, setShowSkeleton] = useState(true);
+
+  // Show skeleton for minimum 2 seconds
+  useEffect(() => {
+    if (loading) {
+      setShowSkeleton(true);
+    } else {
+      const timer = setTimeout(() => {
+        setShowSkeleton(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   // ── Totals ──────────────────────────────────────────────────────────────
   const totalBalance = accounts
@@ -61,7 +96,7 @@ export default function AccountsPage() {
       await createAccount(payload);
       setModalOpen(false);
     } catch (e: any) {
-      setActionError(e?.response?.data || 'Failed to create account');
+      setActionError(extractErrorMessage(e, 'Failed to create account'));
     }
   };
 
@@ -85,7 +120,7 @@ export default function AccountsPage() {
       setEditingAccount(null);
       setModalOpen(false);
     } catch (e: any) {
-      setActionError(e?.response?.data || 'Failed to update account');
+      setActionError(extractErrorMessage(e, 'Failed to update account'));
     }
   };
 
@@ -95,8 +130,8 @@ export default function AccountsPage() {
       await transfer(dto);
       await fetchAccounts(); // refresh balances after transfer
     } catch (e: any) {
-      setActionError(e?.response?.data || 'Failed to process transfer');
-      throw e; // re-throw so modal stays open on error
+      setActionError(extractErrorMessage(e, 'Failed to process transfer'));
+      throw e; // re-throw so TransferModal stays open and shows its own error
     }
   };
 
@@ -106,7 +141,7 @@ export default function AccountsPage() {
     try {
       await toggleActive(account.id);
     } catch (e: any) {
-      setActionError(e?.response?.data || 'Failed to toggle account');
+      setActionError(extractErrorMessage(e, 'Failed to toggle account'));
     }
   };
 
@@ -127,8 +162,43 @@ export default function AccountsPage() {
     setTransferModalOpen(true);
   };
 
+  const openDeposit = (accountId?: string) => {
+    setPreselectedAccountId(accountId || null);
+    setMenuOpenId(null);
+    setDepositModalOpen(true);
+  };
+
+  const handleDeposit = async (dto: CreateDepositDto) => {
+    setActionError(null);
+    try {
+      const result = await createDeposit(dto);
+      await fetchAccounts(); // refresh balances after deposit
+      toast.success(`Deposit of ${dto.amount} added successfully!`);
+      setDepositModalOpen(false);
+      setPreselectedAccountId(null);
+    } catch (e: any) {
+      const errorMsg = extractErrorMessage(e, 'Failed to add deposit');
+      setActionError(errorMsg);
+      toast.error(errorMsg);
+      throw e; // re-throw so DepositModal stays open and shows its own error
+    }
+  };
+
   const formatAmount = (amount: number, currency = 'TND') =>
     `${Number(amount).toLocaleString('fr-TN', { minimumFractionDigits: 3 })} ${currency}`;
+
+  // Normalize hook-level error to a string too
+  const pageError: string | null = !error
+    ? null
+    : typeof error === 'string'
+    ? error
+    : Array.isArray(error)
+    ? (error as any[]).map((e) => (e?.message ?? String(e))).join(', ')
+    : String(error);
+
+  const displayError = pageError || actionError;
+
+  const isDisplayLoading = loading || showSkeleton;
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -147,7 +217,15 @@ export default function AccountsPage() {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </button>
-          {/* Transfer button — only show if 2+ active accounts */}
+          {accounts.filter((a) => a.is_active).length >= 1 && (
+            <button
+              onClick={() => openDeposit()}
+              className="flex items-center gap-2 px-4 py-2 border border-green-300 text-green-600 rounded-lg hover:bg-green-50 transition-colors"
+            >
+              <DollarSign className="h-4 w-4" />
+              Add Money
+            </button>
+          )}
           {accounts.filter((a) => a.is_active).length >= 2 && (
             <button
               onClick={() => openTransfer()}
@@ -167,57 +245,57 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {/* Error banner */}
-      {(error || actionError) && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm space-y-1">
-          {Array.isArray(error)
-            ? error.map((e: any, idx: number) => (
-                <p key={idx}>{e.field ? `${e.field}: ` : ''}{e.message}</p>
-              ))
-            : Array.isArray(actionError)
-            ? actionError.map((e: any, idx: number) => (
-                <p key={idx}>{e.field ? `${e.field}: ` : ''}{e.message}</p>
-              ))
-            : <p>{error || actionError}</p>}
+      {/* Error banner — always a plain string now, safe to render */}
+      {displayError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+          <p>{displayError}</p>
         </div>
       )}
 
       {/* Summary Cards */}
-      <div className="grid sm:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl p-6 border border-gray-200">
-          <div className="flex items-start justify-between mb-4">
-            <div className="p-3 rounded-xl bg-indigo-100">
-              <TrendingUp className="h-6 w-6 text-indigo-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{formatAmount(totalBalance)}</p>
-          <p className="text-sm text-gray-500">Total Balance (active accounts)</p>
+      {isDisplayLoading ? (
+        <div className="grid sm:grid-cols-3 gap-6">
+          <SummaryCardSkeleton />
+          <SummaryCardSkeleton />
+          <SummaryCardSkeleton />
         </div>
+      ) : (
+        <div className="grid sm:grid-cols-3 gap-6">
+          <div className="bg-white rounded-xl p-6 border border-gray-200">
+            <div className="flex items-start justify-between mb-4">
+              <div className="p-3 rounded-xl bg-indigo-100">
+                <TrendingUp className="h-6 w-6 text-indigo-600" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-gray-900 mb-1">{formatAmount(totalBalance)}</p>
+            <p className="text-sm text-gray-500">Total Balance (active accounts)</p>
+          </div>
 
-        <div className="bg-white rounded-xl p-6 border border-gray-200">
-          <div className="flex items-start justify-between mb-4">
-            <div className="p-3 rounded-xl bg-blue-100">
-              <Building2 className="h-6 w-6 text-blue-600" />
+          <div className="bg-white rounded-xl p-6 border border-gray-200">
+            <div className="flex items-start justify-between mb-4">
+              <div className="p-3 rounded-xl bg-blue-100">
+                <Building2 className="h-6 w-6 text-blue-600" />
+              </div>
             </div>
+            <p className="text-2xl font-bold text-gray-900 mb-1">{formatAmount(bankBalance)}</p>
+            <p className="text-sm text-gray-500">
+              Bank Accounts ({accounts.filter((a) => a.type === 'BANK' && a.is_active).length})
+            </p>
           </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{formatAmount(bankBalance)}</p>
-          <p className="text-sm text-gray-500">
-            Bank Accounts ({accounts.filter((a) => a.type === 'BANK' && a.is_active).length})
-          </p>
-        </div>
 
-        <div className="bg-white rounded-xl p-6 border border-gray-200">
-          <div className="flex items-start justify-between mb-4">
-            <div className="p-3 rounded-xl bg-green-100">
-              <Wallet className="h-6 w-6 text-green-600" />
+          <div className="bg-white rounded-xl p-6 border border-gray-200">
+            <div className="flex items-start justify-between mb-4">
+              <div className="p-3 rounded-xl bg-green-100">
+                <Wallet className="h-6 w-6 text-green-600" />
+              </div>
             </div>
+            <p className="text-2xl font-bold text-gray-900 mb-1">{formatAmount(cashBalance)}</p>
+            <p className="text-sm text-gray-500">
+              Cash ({accounts.filter((a) => a.type === 'CASH' && a.is_active).length})
+            </p>
           </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{formatAmount(cashBalance)}</p>
-          <p className="text-sm text-gray-500">
-            Cash ({accounts.filter((a) => a.type === 'CASH' && a.is_active).length})
-          </p>
         </div>
-      </div>
+      )}
 
       {/* Accounts Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -225,10 +303,26 @@ export default function AccountsPage() {
           <h2 className="text-lg font-semibold text-gray-900">All Accounts</h2>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-16 text-gray-400">
-            <RefreshCw className="h-6 w-6 animate-spin mr-2" />
-            Loading accounts...
+        {isDisplayLoading ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Account</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Bank / RIB</th>
+                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Opening Balance</th>
+                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Current Balance</th>
+                  <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[...Array(3)].map((_, i) => (
+                  <AccountCardSkeleton key={i} />
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : accounts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
@@ -355,7 +449,15 @@ export default function AccountsPage() {
                                 <Pencil className="h-4 w-4 text-gray-400" />
                                 Edit
                               </button>
-                              {/* Transfer from this account — only if another active account exists */}
+                              {account.is_active && (
+                                <button
+                                  onClick={() => openDeposit(account.id)}
+                                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-green-600 hover:bg-gray-50"
+                                >
+                                  <DollarSign className="h-4 w-4" />
+                                  Add Money
+                                </button>
+                              )}
                               {account.is_active && accounts.filter((a) => a.is_active && a.id !== account.id).length >= 1 && (
                                 <button
                                   onClick={() => openTransfer(account.id)}
@@ -401,6 +503,19 @@ export default function AccountsPage() {
         accounts={accounts}
         preselectedFromId={preselectedFromId}
       />
+
+      {/* Deposit Modal */}
+      <DepositModal
+        open={depositModalOpen}
+        onClose={() => { setDepositModalOpen(false); setPreselectedAccountId(null); }}
+        onSubmit={handleDeposit}
+        accounts={accounts}
+        preselectedAccountId={preselectedAccountId}
+      />
+
+      {/* AI Cash Flow Forecast - Only for Premium users */}
+      {!aiLoading && hasAIAccess && <CashFlowForecast />}
     </div>
+
   );
 }

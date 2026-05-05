@@ -1,0 +1,329 @@
+/* ═══════════════════════════════════════════════════════════════
+   MODE SIMPLIFIÉ - Interface ultra-accessible
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════
+   RÈGLE CRITIQUE: Le bouton d'accessibilité doit TOUJOURS être visible
+   ══════════════════════════════════════════════════════════════ */
+.accessibility-button,
+button.accessibility-button,
+[data-simplified-mode="true"] .accessibility-button,
+[data-simplified-mode="true"] button.accessibility-button {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Activer le mode simplifié */
+[data-simplified-mode="true"] {
+  /* Augmenter la taille de base du texte */
+  font-size: 18px !important;
+}
+
+/* ── Boutons plus gros et plus visibles ──────────────────────── */
+[data-simplified-mode="true"] button,
+[data-simplified-mode="true"] .btn,
+[data-simplified-mode="true"] a[role="button"] {
+  min-height: 56px !important;
+  padding: 16px 24px !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  border-radius: 12px !important;
+  gap: 12px !important;
+}
+
+/* Boutons primaires encore plus visibles */
+[data-simplified-mode="true"] .bg-indigo-600,
+[data-simplified-mode="true"] .bg-indigo-500 {
+  min-height: 64px !important;
+  font-size: 20px !important;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
+}
+
+/* ── Textes plus grands ──────────────────────────────────────── */
+[data-simplified-mode="true"] h1 {
+  font-size: 2.5rem !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+}
+
+[data-simplified-mode="true"] h2 {
+  font-size: 2rem !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+}
+
+[data-simplified-mode="true"] h3 {
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+}
+
+[data-simplified-mode="true"] p,
+[data-simplified-mode="true"] span,
+[data-simplified-mode="true"] div {
+  font-size: 18px !important;
+  line-height: 1.6 !important;
+}
+
+[data-simplified-mode="true"] label {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  margin-bottom: 8px !important;
+}
+
+/* ── Inputs et formulaires plus grands ───────────────────────── */
+[data-simplified-mode="true"] input,
+[data-simplified-mode="true"] select,
+[data-simplified-mode="true"] textarea {
+  min-height: 56px !important;
+  padding: 16px !important;
+  font-size: 18px !important;
+  border-width: 2px !important;
+  border-radius: 12px !important;
+}
+
+/* ── Masquer les fonctions avancées ──────────────────────────── */
+[data-simplified-mode="true"] .advanced-feature,
+[data-simplified-mode="true"] [data-advanced="true"],
+[data-simplified-mode="true"] .filter-section,
+[data-simplified-mode="true"] .sort-controls,
+[data-simplified-mode="true"] .secondary-actions {
+  display: none !important;
+}
+
+/* ── Masquer les boutons secondaires (garder seulement les principaux) */
+/* EXCEPTION: Ne jamais masquer le bouton d'accessibilité */
+[data-simplified-mode="true"] .text-gray-400:not(.accessibility-button):not(.accessibility-button *),
+[data-simplified-mode="true"] .text-gray-500:not(.text-gray-900):not(.font-bold):not(.accessibility-button):not(.accessibility-button *) {
+  display: none !important;
+}
+
+/* ── IMPORTANT: Toujours afficher le bouton d'accessibilité ──── */
+[data-simplified-mode="true"] .accessibility-button,
+[data-simplified-mode="true"] button.accessibility-button,
+[data-simplified-mode="true"] .fixed.bottom-6.right-6 {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 80px !important;
+  min-height: 80px !important;
+  font-size: 24px !important;
+  z-index: 9999 !important;
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+}
+
+[data-simplified-mode="true"] .accessibility-button svg,
+[data-simplified-mode="true"] button.accessibility-button svg {
+  width: 36px !important;
+  height: 36px !important;
+  display: block !important;
+  visibility: visible !important;
+}
+
+/* ── Simplifier les tableaux ─────────────────────────────────── */
+[data-simplified-mode="true"] table {
+  font-size: 18px !important;
+}
+
+[data-simplified-mode="true"] th {
+  padding: 20px !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+}
+
+[data-simplified-mode="true"] td {
+  padding: 20px !important;
+  font-size: 18px !important;
+}
+
+/* Masquer les colonnes secondaires dans les tableaux */
+[data-simplified-mode="true"] table th:nth-child(n+5),
+[data-simplified-mode="true"] table td:nth-child(n+5) {
+  display: none !important;
+}
+
+/* ── Simplifier la navigation ────────────────────────────────── */
+[data-simplified-mode="true"] .sidebar-container nav a {
+  padding: 20px !important;
+  font-size: 18px !important;
+  min-height: 64px !important;
+}
+
+[data-simplified-mode="true"] .sidebar-container nav svg {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+/* Masquer les sous-menus */
+[data-simplified-mode="true"] .sidebar-submenu-item {
+  display: none !important;
+}
+
+/* ── Cartes et conteneurs plus espacés ───────────────────────── */
+[data-simplified-mode="true"] .bg-white,
+[data-simplified-mode="true"] .rounded-xl {
+  padding: 24px !important;
+  margin-bottom: 24px !important;
+  border-width: 2px !important;
+}
+
+/* ── Icônes plus grandes ─────────────────────────────────────── */
+[data-simplified-mode="true"] svg {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+[data-simplified-mode="true"] .lucide {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+/* ── Espacement généreux ─────────────────────────────────────── */
+[data-simplified-mode="true"] .space-y-4 > * + * {
+  margin-top: 24px !important;
+}
+
+[data-simplified-mode="true"] .space-y-6 > * + * {
+  margin-top: 32px !important;
+}
+
+[data-simplified-mode="true"] .gap-2 {
+  gap: 16px !important;
+}
+
+[data-simplified-mode="true"] .gap-4 {
+  gap: 24px !important;
+}
+
+/* ── Masquer les éléments décoratifs ─────────────────────────── */
+[data-simplified-mode="true"] .gradient,
+[data-simplified-mode="true"] .shadow-lg,
+[data-simplified-mode="true"] .decoration {
+  display: none !important;
+}
+
+/* ── Focus très visible ──────────────────────────────────────── */
+[data-simplified-mode="true"] *:focus-visible {
+  outline: 4px solid #6366f1 !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.2) !important;
+}
+
+/* ── Simplifier les modals ───────────────────────────────────── */
+[data-simplified-mode="true"] [role="dialog"] {
+  max-width: 90vw !important;
+  padding: 32px !important;
+}
+
+[data-simplified-mode="true"] [role="dialog"] h2 {
+  font-size: 2rem !important;
+  margin-bottom: 24px !important;
+}
+
+/* ── Masquer les statistiques complexes ──────────────────────── */
+[data-simplified-mode="true"] .chart-container,
+[data-simplified-mode="true"] .recharts-wrapper,
+[data-simplified-mode="true"] .analytics-panel {
+  display: none !important;
+}
+
+/* ── Simplifier les badges et tags ───────────────────────────── */
+[data-simplified-mode="true"] .badge,
+[data-simplified-mode="true"] .tag {
+  padding: 8px 16px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+}
+
+/* ── Contraste élevé pour le mode simplifié ──────────────────── */
+[data-simplified-mode="true"] {
+  --tw-text-opacity: 1 !important;
+}
+
+[data-simplified-mode="true"] .text-gray-600,
+[data-simplified-mode="true"] .text-gray-500 {
+  color: rgb(31 41 55) !important;
+}
+
+/* ── Masquer les actions secondaires dans les cartes ─────────── */
+[data-simplified-mode="true"] .card-actions button:not(:first-child) {
+  display: none !important;
+}
+
+/* ── Simplifier les dropdowns ────────────────────────────────── */
+[data-simplified-mode="true"] select {
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 16px center !important;
+  background-size: 24px !important;
+  padding-right: 56px !important;
+}
+
+/* ── Messages d'erreur et succès plus visibles ───────────────── */
+[data-simplified-mode="true"] .error,
+[data-simplified-mode="true"] .text-red-600 {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  padding: 16px !important;
+  background-color: #fee2e2 !important;
+  border: 3px solid #dc2626 !important;
+  border-radius: 12px !important;
+}
+
+[data-simplified-mode="true"] .success,
+[data-simplified-mode="true"] .text-green-600 {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  padding: 16px !important;
+  background-color: #dcfce7 !important;
+  border: 3px solid #16a34a !important;
+  border-radius: 12px !important;
+}
+
+/* ── Pagination simplifiée ───────────────────────────────────── */
+[data-simplified-mode="true"] .pagination button {
+  min-width: 64px !important;
+  min-height: 64px !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+}
+
+/* Masquer les numéros de page intermédiaires */
+[data-simplified-mode="true"] .pagination button:not(:first-child):not(:last-child):not(.active) {
+  display: none !important;
+}
+
+/* ── Simplifier le header ────────────────────────────────────── */
+[data-simplified-mode="true"] .top-header {
+  padding: 24px !important;
+  min-height: 96px !important;
+}
+
+/* Masquer la barre de recherche en mode simplifié */
+[data-simplified-mode="true"] .search-input {
+  display: none !important;
+}
+
+/* ── Notifications toast plus grandes ────────────────────────── */
+[data-simplified-mode="true"] [data-sonner-toast] {
+  padding: 24px !important;
+  font-size: 20px !important;
+  min-height: 80px !important;
+}
+
+/* ── Améliorer la lisibilité ─────────────────────────────────── */
+[data-simplified-mode="true"] * {
+  letter-spacing: 0.5px !important;
+}
+
+/* ── Masquer les tooltips natifs ─────────────────────────────── */
+[data-simplified-mode="true"] [title]:hover::after {
+  display: none !important;
+}

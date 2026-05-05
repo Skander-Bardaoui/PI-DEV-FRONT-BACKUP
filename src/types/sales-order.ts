@@ -58,7 +58,7 @@ export interface SalesOrder {
 }
 
 export interface CreateSalesOrderItemDto {
-  productId?: string;
+  productId: string; // ✅ Made REQUIRED for stock tracking
   description: string;
   quantity: number;
   unitPrice: number;

@@ -18,4 +18,17 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Ignore TypeScript warnings during build
+        if (warning.code === 'UNUSED_EXTERNAL_IMPORT') return;
+        warn(warning);
+      },
+    },
+  },
+  esbuild: {
+    // Disable type checking during build for faster builds
+    logOverride: { 'this-is-undefined-in-esm': 'silent' },
+  },
 })

@@ -19,6 +19,7 @@ import PDFButton from '../purchases/PDFButton';
 import { printSalesOrder } from '@/utils/sales-order-print';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
+import { getBusinessInfo } from '@/utils/business-info.utils';
 
 interface Props {
   order: SalesOrder;
@@ -244,7 +245,10 @@ export default function SalesOrderDetailModal({ order: initialOrder, businessId,
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={() => printSalesOrder(order, (user as any)?.business?.name || 'Entreprise', (user as any)?.business?.matricule_fiscal, (user as any)?.business?.address)}
+                    onClick={async () => {
+                      const info = await getBusinessInfo(user);
+                      printSalesOrder(order, info.businessName, info.businessMF, info.businessAddress);
+                    }}
                     className="group relative overflow-hidden bg-gradient-to-br from-red-50 to-red-100 hover:from-red-100 hover:to-red-200 border border-red-200 rounded-xl p-4 transition-all duration-200 hover:shadow-md"
                   >
                     <div className="flex items-center gap-3">

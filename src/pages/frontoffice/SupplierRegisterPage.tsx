@@ -209,17 +209,19 @@ export default function SupplierRegisterPage() {
   return (
     <PageShell businessName={invitation?.business_name}>
       {/* Bannière invitation */}
-      <div style={{ background: 'linear-gradient(135deg,#4F46E5,#7C3AED)', padding: '16px 24px', borderRadius: '12px 12px 0 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <Sparkles size={16} color="#E0E7FF" />
+      <div style={{ background: 'linear-gradient(135deg,#4F46E5,#6366F1)', padding: '20px 24px', borderRadius: '12px 12px 0 0', boxShadow: '0 2px 8px rgba(79,70,229,0.15)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+          <div style={{ width: 40, height: 40, background: 'rgba(255,255,255,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Sparkles size={20} color="#fff" />
+          </div>
           <div>
-            <p style={{ margin: 0, fontSize: 11, color: '#C7D2FE', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Invitation de</p>
-            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>
+            <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Invitation de</p>
+            <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#fff' }}>
               {invitation?.business_name}
             </p>
           </div>
         </div>
-        <p style={{ margin: '0', fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
+        <p style={{ margin: '0', fontSize: 14, color: 'rgba(255,255,255,0.95)', lineHeight: 1.6 }}>
           Bonjour{invitation?.name ? ` ${invitation.name}` : ''} — Complétez votre fiche fournisseur en 4 étapes simples.
         </p>
       </div>
@@ -318,9 +320,9 @@ export default function SupplierRegisterPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <StepTitle icon={<Banknote size={16} />} title="Coordonnées bancaires"
               subtitle="Pour recevoir vos paiements" />
-            <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#92400E', display: 'flex', gap: 8 }}>
-              <span>🔒</span>
-              <span>Vos informations bancaires sont chiffrées et sécurisées. Elles ne seront utilisées que pour vos paiements avec <strong>{invitation?.business_name}</strong>.</span>
+            <div style={{ background: '#FEF3C7', border: '2px solid #FCD34D', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#92400E', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 18 }}>🔒</span>
+              <span style={{ lineHeight: 1.6 }}>Vos informations bancaires sont chiffrées et sécurisées. Elles ne seront utilisées que pour vos paiements avec <strong>{invitation?.business_name}</strong>.</span>
             </div>
             <Field label="RIB" hint="Ex: TN59 1234 5678 9012 3456 7890" error={fieldErrors.rib}>
               <input value={form.rib} onChange={e => set('rib', e.target.value)}
@@ -352,8 +354,8 @@ export default function SupplierRegisterPage() {
             <Field label="Délai de paiement souhaité (jours)" hint="Par défaut : 30 jours">
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
                 {['15', '30', '45', '60'].map(d => (
-                  <button key={d} onClick={() => set('payment_terms', d)}
-                    style={{ padding: '10px 0', border: `2px solid ${form.payment_terms === d ? '#4F46E5' : '#E5E7EB'}`, borderRadius: 8, cursor: 'pointer', background: form.payment_terms === d ? '#EEF2FF' : '#fff', fontWeight: form.payment_terms === d ? 700 : 400, color: form.payment_terms === d ? '#4F46E5' : '#374151', fontSize: 14 }}>
+                  <button key={d} type="button" onClick={() => set('payment_terms', d)}
+                    style={{ padding: '12px 0', border: `2px solid ${form.payment_terms === d ? '#4F46E5' : '#E5E7EB'}`, borderRadius: 8, cursor: 'pointer', background: form.payment_terms === d ? '#4F46E5' : '#fff', fontWeight: 600, color: form.payment_terms === d ? '#fff' : '#374151', fontSize: 14, transition: 'all 0.2s' }}>
                     {d}j
                   </button>
                 ))}
@@ -367,9 +369,10 @@ export default function SupplierRegisterPage() {
             </Field>
 
             {/* Récap avant envoi */}
-            <div style={{ background: '#F8F9FF', border: '1px solid #E0E7FF', borderRadius: 10, padding: '14px 16px' }}>
-              <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#4F46E5' }}>
-                ✅ Récapitulatif de votre fiche
+            <div style={{ background: 'linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%)', border: '2px solid #BAE6FD', borderRadius: 12, padding: '16px 18px' }}>
+              <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: '#0C4A6E', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <CheckCircle size={16} color="#0C4A6E" />
+                Récapitulatif de votre fiche
               </p>
               {[
                 { label: 'Entreprise',    val: form.name },
@@ -381,9 +384,9 @@ export default function SupplierRegisterPage() {
                 { label: 'Catégorie',     val: form.category || '—' },
                 { label: 'Délai paiement',val: `${form.payment_terms} jours` },
               ].map(r => (
-                <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12, borderBottom: '1px solid #E0E7FF' }}>
-                  <span style={{ color: '#6B7280' }}>{r.label}</span>
-                  <span style={{ fontWeight: 500, color: '#111', maxWidth: '60%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.val}</span>
+                <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderBottom: '1px solid #BAE6FD' }}>
+                  <span style={{ color: '#475569', fontWeight: 500 }}>{r.label}</span>
+                  <span style={{ fontWeight: 600, color: '#0F172A', maxWidth: '60%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.val}</span>
                 </div>
               ))}
             </div>
@@ -401,18 +404,18 @@ export default function SupplierRegisterPage() {
       <div style={{ padding: '12px 24px 20px', display: 'flex', gap: 8, borderTop: '1px solid #F3F4F6' }}>
         {step > 0 && (
           <button onClick={prev}
-            style={{ padding: '11px 18px', border: '1px solid #E5E7EB', borderRadius: 8, cursor: 'pointer', background: '#fff', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, color: '#6B7280' }}>
-            <ChevronLeft size={15} /> Retour
+            style={{ padding: '12px 20px', border: '2px solid #E5E7EB', borderRadius: 8, cursor: 'pointer', background: '#fff', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, color: '#374151', fontWeight: 500, transition: 'all 0.2s' }}>
+            <ChevronLeft size={16} /> Retour
           </button>
         )}
         {step < STEPS.length - 1 ? (
           <button onClick={next}
-            style={{ flex: 1, padding: '11px', background: 'linear-gradient(135deg,#4F46E5,#7C3AED)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            Continuer <ChevronRight size={15} />
+            style={{ flex: 1, padding: '12px', background: '#4F46E5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s' }}>
+            Continuer <ChevronRight size={16} />
           </button>
         ) : (
           <button onClick={handleSubmit} disabled={submitting}
-            style={{ flex: 1, padding: '11px', background: submitting ? '#A5B4FC' : 'linear-gradient(135deg,#16A34A,#15803D)', color: '#fff', border: 'none', borderRadius: 8, cursor: submitting ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            style={{ flex: 1, padding: '12px', background: submitting ? '#9CA3AF' : '#16A34A', color: '#fff', border: 'none', borderRadius: 8, cursor: submitting ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s' }}>
             {submitting
               ? <><span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />Enregistrement...</>
               : <><CheckCircle size={16} />Créer ma fiche fournisseur</>}
@@ -452,12 +455,14 @@ function PageShell({ children, businessName }: { children: React.ReactNode; busi
 
 function StepTitle({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
   return (
-    <div style={{ marginBottom: 4 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-        <span style={{ color: '#4F46E5' }}>{icon}</span>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{title}</h3>
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+        <div style={{ width: 32, height: 32, background: '#EEF2FF', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4F46E5' }}>
+          {icon}
+        </div>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#111827' }}>{title}</h3>
       </div>
-      <p style={{ margin: 0, fontSize: 12, color: '#6B7280' }}>{subtitle}</p>
+      <p style={{ margin: 0, fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>{subtitle}</p>
     </div>
   );
 }
@@ -465,23 +470,25 @@ function StepTitle({ icon, title, subtitle }: { icon: React.ReactNode; title: st
 function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: error ? '#DC2626' : '#374151', marginBottom: 5 }}>
+      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: error ? '#DC2626' : '#374151', marginBottom: 6 }}>
         {label}
       </label>
       {children}
-      {hint && !error && <p style={{ margin: '4px 0 0', fontSize: 11, color: '#9CA3AF' }}>{hint}</p>}
-      {error && <p style={{ margin: '4px 0 0', fontSize: 11, color: '#DC2626' }}>{error}</p>}
+      {hint && !error && <p style={{ margin: '5px 0 0', fontSize: 12, color: '#6B7280' }}>{hint}</p>}
+      {error && <p style={{ margin: '5px 0 0', fontSize: 12, color: '#DC2626', fontWeight: 500 }}>{error}</p>}
     </div>
   );
 }
 
 const inp = (hasError = false) => ({
   width: '100%',
-  padding: '10px 12px',
-  border: `1px solid ${hasError ? '#FCA5A5' : '#E5E7EB'}`,
+  padding: '11px 14px',
+  border: `2px solid ${hasError ? '#FCA5A5' : '#E5E7EB'}`,
   borderRadius: 8,
   fontSize: 14,
   outline: 'none',
   boxSizing: 'border-box' as const,
   background: '#fff',
+  transition: 'all 0.2s',
+  color: '#111827',
 });

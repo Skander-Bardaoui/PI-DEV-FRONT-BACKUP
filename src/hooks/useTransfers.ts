@@ -5,7 +5,7 @@ import { CreateTransferDto } from '@/types/treasury';
 
 export function useTransfers() {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | { field: string; message: string }[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const transfer = async (dto: CreateTransferDto) => {
     setLoading(true);
@@ -14,7 +14,13 @@ export function useTransfers() {
       const result = await createTransfer(dto);
       return result;
     } catch (e: any) {
-      const err = e?.response?.data || 'Failed to process transfer';
+      const data = e?.response?.data;
+      const err =
+        typeof data?.message === 'string'
+          ? data.message
+          : Array.isArray(data?.message)
+          ? data.message.join(', ')
+          : 'Failed to process transfer';
       setError(err);
       throw e;
     } finally {

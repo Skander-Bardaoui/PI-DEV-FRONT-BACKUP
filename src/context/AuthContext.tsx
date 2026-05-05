@@ -68,19 +68,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ─── Register Function ───────────────────────────────────────────────
   const register = async (data: RegisterRequest) => {
     try {
-      await registerUser(data);
+      // Register the user (no tokens generated on backend)
+      const registrationResponse = await registerUser(data);
+      console.log('Registration successful:', registrationResponse);
       
-      // Fetch user data after successful registration
-      const userData = await getCurrentUser();
-      setUser(userData);
-      
-      // Redirect to dashboard
-      navigate('/app');
+      // Always redirect to login page after successful registration
+      // User must log in manually to create session and refresh token
+      navigate('/login?registered=true');
     } catch (error: any) {
       console.error('Registration failed:', error);
-      throw new Error(
-        error.response?.data?.message || 'Registration failed. Please try again.'
-      );
+      
+      // Throw the error to be handled by the form
+      const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.';
+      throw new Error(errorMessage);
     }
   };
 

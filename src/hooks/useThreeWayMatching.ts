@@ -34,6 +34,7 @@ export interface MatchResult {
   invoice_id:           string;
   invoice_number:       string;
   supplier_name:        string;
+  supplier_email:       string | null;  // ← Ajout de l'email du fournisseur
   status:               MatchStatus;
   can_auto_approve:     boolean;
   should_auto_dispute:  boolean;
@@ -86,7 +87,7 @@ export function useApplyMatch(businessId: string, useAI: boolean = true) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (invoiceId: string) => axiosInstance
-      .post(`${base(businessId)}/invoice/${invoiceId}/apply`, null, {
+      .post(`${base(businessId)}/invoice/${invoiceId}/apply`, {}, {
         params: { useAI: useAI ? 'true' : 'false' },
       })
       .then(r => r.data as MatchResult),
@@ -94,5 +95,17 @@ export function useApplyMatch(businessId: string, useAI: boolean = true) {
       qc.invalidateQueries({ queryKey: ['purchase-invoices', businessId] });
       qc.invalidateQueries({ queryKey: ['three-way-match-all', businessId] });
     },
+  });
+}
+
+
+// Contacter le fournisseur par email
+export function useContactSupplier(businessId: string, useAI: boolean = true) {
+  return useMutation({
+    mutationFn: (invoiceId: string) => axiosInstance
+      .post(`${base(businessId)}/invoice/${invoiceId}/contact-supplier`, {}, {
+        params: { useAI: useAI ? 'true' : 'false' },
+      })
+      .then(r => r.data as { success: boolean; message: string }),
   });
 }

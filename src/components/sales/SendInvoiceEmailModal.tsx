@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { X, Mail, Send, Loader2, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { useEmailDraft } from '../../hooks/useEmailDraft';
+import { API_URL } from '@/config/api.config';
 
 interface SendInvoiceEmailModalProps {
   isOpen: boolean;
@@ -35,10 +36,7 @@ export default function SendInvoiceEmailModal({
   const handleGenerateDraft = async () => {
     const draft = await generateDraft({
       businessId,
-      clientName: invoice.client?.name || 'Client',
-      invoiceNumber: invoice.invoice_number,
-      amount: Number(invoice.net_amount || 0),
-      dueDate: new Date(invoice.due_date).toLocaleDateString('fr-TN'),
+      invoiceId: invoice.id,
       isReminder,
       language,
     });
@@ -62,10 +60,7 @@ export default function SendInvoiceEmailModal({
       // Generate AI draft
       const draft = await generateDraft({
         businessId,
-        clientName: invoice.client?.name || 'Client',
-        invoiceNumber: invoice.invoice_number,
-        amount: Number(invoice.net_amount || 0),
-        dueDate: new Date(invoice.due_date).toLocaleDateString('fr-TN'),
+        invoiceId: invoice.id,
         isReminder,
         language,
       });
@@ -77,7 +72,7 @@ export default function SendInvoiceEmailModal({
 
       // Send email immediately with AI-generated content
       const response = await fetch(
-        `http://localhost:3001/businesses/${businessId}/invoices/${invoice.id}/send-email`,
+        `${API_URL}/businesses/${businessId}/invoices/${invoice.id}/send-email`,
         {
           method: 'POST',
           headers: {
@@ -121,7 +116,7 @@ export default function SendInvoiceEmailModal({
 
     try {
       const response = await fetch(
-        `http://localhost:3001/businesses/${businessId}/invoices/${invoice.id}/send-email`,
+        `${API_URL}/businesses/${businessId}/invoices/${invoice.id}/send-email`,
         {
           method: 'POST',
           headers: {
@@ -171,14 +166,14 @@ export default function SendInvoiceEmailModal({
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
         <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full my-8 max-h-[90vh] flex flex-col">
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-lg flex items-center justify-between">
+          <div className="bg-white border-b border-gray-200 p-6 rounded-t-lg flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Mail className="h-6 w-6" />
-              <h2 className="text-xl font-semibold">Envoyer la facture par email</h2>
+              <Mail className="h-6 w-6 text-blue-600" />
+              <h2 className="text-xl font-bold text-gray-900">Envoyer la facture par email</h2>
             </div>
             <button
               onClick={handleClose}
-              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600"
             >
               <X className="h-5 w-5" />
             </button>

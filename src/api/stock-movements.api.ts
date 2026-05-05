@@ -99,4 +99,38 @@ export const stockMovementsApi = {
     );
     return response.data;
   },
+
+  /**
+   * Soft delete a stock movement
+   */
+  softDelete: async (businessId: string, id: string): Promise<StockMovement> => {
+    const response = await axios.delete(
+      `${API_URL}/businesses/${businessId}/stock-movements/${id}`,
+      { withCredentials: true },
+    );
+    return response.data;
+  },
+
+  /**
+   * Restore a soft-deleted stock movement
+   */
+  restore: async (businessId: string, id: string): Promise<StockMovement> => {
+    const response = await axios.post(
+      `${API_URL}/businesses/${businessId}/stock-movements/${id}/restore`,
+      {},
+      { withCredentials: true },
+    );
+    return response.data;
+  },
+
+  /**
+   * Get archived (soft-deleted) stock movements
+   */
+  getArchived: async (businessId: string): Promise<StockMovement[]> => {
+    const response = await axios.get(
+      `${API_URL}/businesses/${businessId}/stock-movements/archived`,
+      { withCredentials: true },
+    );
+    return response.data;
+  },
 };

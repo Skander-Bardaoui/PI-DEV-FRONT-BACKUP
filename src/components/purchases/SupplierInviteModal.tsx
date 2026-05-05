@@ -1,51 +1,57 @@
 // src/components/purchases/SupplierInviteModal.tsx
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { X, Mail, User, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { inviteSupplier } from '@/api/suppliers';
-import { useTranslation } from 'react-i18next';
+import { supplierInviteSchema, SupplierInviteFormValues } from '@/schemas/purchases.schemas';
 
 interface Props {
   businessId: string;
   onClose: () => void;
 }
 
+const inputCls = (error?: string) =>
+  `w-full pl-10 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+    error ? 'border-red-400 bg-red-50' : 'border-gray-300'
+  }`;
+
 export default function SupplierInviteModal({ businessId, onClose }: Props) {
-  const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<SupplierInviteFormValues>({
+    resolver: zodResolver(supplierInviteSchema),
+    defaultValues: {
+      email: '',
+      supplier_name: '',
+      message: '',
+    },
+  });
+
+  const emailValue = watch('email');
+
   const mutation = useMutation({
-    mutationFn: () => inviteSupplier(businessId, { email, name: name || undefined }),
+    mutationFn: (data: SupplierInviteFormValues) => 
+      inviteSupplier(businessId, { 
+        email: data.email, 
+        name: data.supplier_name || undefined,
+      }),
     onSuccess: () => {
       setSuccess(true);
       queryClient.invalidateQueries({ queryKey: ['suppliers', businessId] });
       setTimeout(() => onClose(), 2500);
     },
-    onError: (err: any) => {
-      setError(err?.response?.data?.message || 'Erreur lors de l\'envoi de l\'invitation');
-    },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    
-    if (!email.trim()) {
-      setError('L\'email est obligatoire');
-      return;
-    }
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError('Format d\'email invalide');
-      return;
-    }
-
-    mutation.mutate();
+  const onSubmit = (data: SupplierInviteFormValues) => {
+    mutation.mutate(data);
   };
 
   if (success) {
@@ -57,7 +63,7 @@ export default function SupplierInviteModal({ businessId, onClose }: Props) {
           </div>
           <h3 className="text-xl font-bold text-gray-900 mb-2">Invitation envoyée !</h3>
           <p className="text-gray-600 text-sm mb-4">
-            Un email d'invitation a été envoyé à <strong>{email}</strong>
+            Un email d'invitation a été envoyé à <strong>{emailValue}</strong>
           </p>
           <p className="text-xs text-gray-500">
             Le fournisseur recevra un lien pour compléter sa fiche. Vous serez notifié par email une fois qu'il aura terminé.
@@ -83,18 +89,20 @@ export default function SupplierInviteModal({ businessId, onClose }: Props) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
           {/* Info box */}
-          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-            <div className="flex gap-3">
-              <Mail className="h-5 w-5 text-indigo-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-indigo-900">
-                <p className="font-medium mb-1">Comment ça marche ?</p>
-                <ul className="space-y-1 text-indigo-700 text-xs">
-                  <li>• Le fournisseur reçoit un email avec un lien sécurisé</li>
-                  <li>• Il remplit sa fiche en quelques minutes</li>
-                  <li>• Vous recevez une notification automatique</li>
-                  <li>• Le fournisseur est ajouté à votre liste</li>
+          <div style={{ background: '#EEF2FF', border: '2px solid #C7D2FE', borderRadius: 10, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{ width: 36, height: 36, background: '#4F46E5', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Mail className="h-5 w-5" style={{ color: '#fff' }} />
+              </div>
+              <div className="text-sm">
+                <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: 14, color: '#1E1B4B' }}>Comment ça marche ?</p>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#4338CA', lineHeight: 1.8 }}>
+                  <li>Le fournisseur reçoit un email avec un lien sécurisé</li>
+                  <li>Il remplit sa fiche en quelques minutes</li>
+                  <li>Vous recevez une notification automatique</li>
+                  <li>Le fournisseur est ajouté à votre liste</li>
                 </ul>
               </div>
             </div>
@@ -103,47 +111,70 @@ export default function SupplierInviteModal({ businessId, onClose }: Props) {
           {/* Email field */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email du fournisseur *
+              Email du fournisseur <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                {...register('email')}
                 placeholder="fournisseur@exemple.com"
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                disabled={mutation.isPending}
+                className={inputCls(errors.email?.message)}
+                disabled={isSubmitting}
               />
             </div>
+            {errors.email && (
+              <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+            )}
           </div>
 
           {/* Name field */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nom du fournisseur (optionnel)
+              Nom du fournisseur
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                {...register('supplier_name')}
                 placeholder="Nom de l'entreprise"
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                disabled={mutation.isPending}
+                className={inputCls(errors.supplier_name?.message)}
+                disabled={isSubmitting}
               />
             </div>
+            {errors.supplier_name && (
+              <p className="text-red-500 text-xs mt-1">{errors.supplier_name.message}</p>
+            )}
             <p className="text-xs text-gray-500 mt-1">
               Le nom sera pré-rempli dans le formulaire d'inscription
             </p>
           </div>
 
+          {/* Message field */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Message personnalisé (optionnel)
+            </label>
+            <textarea
+              {...register('message')}
+              placeholder="Ajoutez un message pour le fournisseur..."
+              rows={3}
+              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none ${
+                errors.message ? 'border-red-400 bg-red-50' : 'border-gray-300'
+              }`}
+              disabled={isSubmitting}
+            />
+            {errors.message && (
+              <p className="text-red-500 text-xs mt-1">{errors.message.message}</p>
+            )}
+          </div>
+
           {/* Error message */}
-          {error && (
+          {mutation.error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              <span>{error}</span>
+              <span>{(mutation.error as any)?.response?.data?.message || 'Erreur lors de l\'envoi de l\'invitation'}</span>
             </div>
           )}
 
@@ -153,16 +184,16 @@ export default function SupplierInviteModal({ businessId, onClose }: Props) {
               type="button"
               onClick={onClose}
               className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              disabled={mutation.isPending}
+              disabled={isSubmitting}
             >
               Annuler
             </button>
             <button
               type="submit"
-              disabled={mutation.isPending}
+              disabled={isSubmitting}
               className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {mutation.isPending ? (
+              {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   Envoi...

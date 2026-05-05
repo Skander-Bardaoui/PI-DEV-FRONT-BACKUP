@@ -441,9 +441,9 @@ export default function SalesOcrInvoiceModal({ businessId, onClose, onCreated }:
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Brain size={20} color="#fff" />
             <div style={{ flex: 1 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#fff' }}>Import intelligent par IA</h2>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#fff' }}>Scanner une Facture</h2>
               <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
-                OCR + Gemini AI · Extraction automatique des données
+                Importez votre facture et laissez l'IA extraire les données automatiquement
               </p>
             </div>
             <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', cursor: 'pointer', color: '#fff', borderRadius: 8, padding: 6 }}>

@@ -34,7 +34,6 @@ export default function CreateInvoiceFromPOModal({ businessId, po, onClose }: Pr
   });
 
   const [form, setForm] = useState({
-    invoice_number_supplier: '',
     invoice_date:  new Date().toISOString().split('T')[0],
     due_date:      '',
     subtotal_ht:   Number(po.subtotal_ht),
@@ -50,35 +49,9 @@ export default function CreateInvoiceFromPOModal({ businessId, po, onClose }: Pr
   useEffect(() => {
     if (!receipts || receipts.length === 0) return;
 
-    // Si aucun BR sélectionné, sélectionner automatiquement le premier BR non facturé
+    // Si aucun BR sélectionné, sélectionner automatiquement le premier
     if (!selectedGRId && receipts.length > 0) {
-      // Trouver les BRs déjà facturés en comparant les montants
-      const invoicedAmounts = new Set(
-        (existingInvoices?.data ?? []).map(inv => 
-          `${Number(inv.subtotal_ht).toFixed(3)}-${Number(inv.tax_amount).toFixed(3)}`
-        )
-      );
-
-      // Trouver le premier BR non facturé
-      const unfactoredGR = receipts.find(gr => {
-        let grHT = 0;
-        let grTVA = 0;
-        gr.items?.forEach(grItem => {
-          const poItem = po.items?.find(pi => pi.id === grItem.supplier_po_item_id);
-          if (poItem) {
-            const lineHT = Number(grItem.quantity_received) * Number(poItem.unit_price_ht);
-            const lineTVA = lineHT * (Number(poItem.tax_rate_value) / 100);
-            grHT += lineHT;
-            grTVA += lineTVA;
-          }
-        });
-        const key = `${round3(grHT).toFixed(3)}-${round3(grTVA).toFixed(3)}`;
-        return !invoicedAmounts.has(key);
-      });
-
-      if (unfactoredGR) {
-        setSelectedGRId(unfactoredGR.id);
-      }
+      setSelectedGRId(receipts[0].id);
     }
 
     // Calculer les montants du BR sélectionné
@@ -105,28 +78,44 @@ export default function CreateInvoiceFromPOModal({ businessId, po, onClose }: Pr
         }));
       }
     }
-  }, [receipts, po.items, existingInvoices, selectedGRId]);
+  }, [receipts, po.items, selectedGRId]);
 
   const net_amount = round3(form.subtotal_ht + form.tax_amount + form.timbre_fiscal);
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   const [ocrOpen, setOcrOpen] = useState(false);
 
-  // ── Détection doublon ─────────────────────────────────────────────────────
-  const isDuplicate = (existingInvoices?.data ?? []).some(
-    inv => inv.invoice_number_supplier.toLowerCase().trim() === form.invoice_number_supplier.toLowerCase().trim()
-  );
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (isDuplicate) {
-      toast.error('Doublon détecté', `Une facture avec le N° "${form.invoice_number_supplier}" existe déjà pour ce fournisseur`);
+    // Validation
+    const errors: string[] = [];
+    
+    if (!form.invoice_date) {
+      errors.push('La date de facture est obligatoire');
+    }
+    if (form.due_date && form.invoice_date && new Date(form.due_date) < new Date(form.invoice_date)) {
+      errors.push('La date d\'échéance doit être postérieure à la date de facture');
+    }
+    if (form.subtotal_ht < 0) {
+      errors.push('Le sous-total HT ne peut pas être négatif');
+    }
+    if (form.tax_amount < 0) {
+      errors.push('La TVA ne peut pas être négative');
+    }
+    if (form.timbre_fiscal < 0) {
+      errors.push('Le timbre fiscal ne peut pas être négatif');
+    }
+    if (!selectedGRId && receipts && receipts.length > 0) {
+      errors.push('Veuillez sélectionner un bon de réception');
+    }
+
+    if (errors.length > 0) {
+      toast.error('Validation', errors.join('. '));
       return;
     }
 
     try {
       await create.mutateAsync({
-        invoice_number_supplier: form.invoice_number_supplier,
         supplier_id:   po.supplier_id,
         supplier_po_id: po.id,
         invoice_date:  form.invoice_date,
@@ -135,8 +124,9 @@ export default function CreateInvoiceFromPOModal({ businessId, po, onClose }: Pr
         tax_amount:    form.tax_amount,
         timbre_fiscal: form.timbre_fiscal,
         receipt_url:   form.receipt_url || undefined,
+        goods_receipt_id: selectedGRId || undefined,
       });
-      toast.success('Facture créée', `La facture ${form.invoice_number_supplier} a été enregistrée`);
+      toast.success('Facture créée', 'La facture a été enregistrée avec un numéro auto-généré');
       onClose();
     } catch (err) { handleError(err, 'Impossible de créer la facture'); }
   };
@@ -188,17 +178,10 @@ export default function CreateInvoiceFromPOModal({ businessId, po, onClose }: Pr
                       }
                     });
                     const grTotal = round3(grHT + grTVA + 1.000);
-                    
-                    // Vérifier si déjà facturé
-                    const isInvoiced = (existingInvoices?.data ?? []).some(inv => 
-                      Math.abs(Number(inv.subtotal_ht) - grHT) < 0.01 && 
-                      Math.abs(Number(inv.tax_amount) - grTVA) < 0.01
-                    );
 
                     return (
                       <option key={gr.id} value={gr.id}>
                         {gr.gr_number} - {new Date(gr.receipt_date).toLocaleDateString('fr-FR')} - {formatAmount(grTotal)}
-                        {isInvoiced ? ' (déjà facturé)' : ''}
                       </option>
                     );
                   })}
@@ -213,19 +196,15 @@ export default function CreateInvoiceFromPOModal({ businessId, po, onClose }: Pr
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              N° facture fournisseur *
-            </label>
-            <input type="text" required value={form.invoice_number_supplier}
-              onChange={e => set('invoice_number_supplier', e.target.value)}
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
-                isDuplicate && form.invoice_number_supplier ? 'border-red-300 bg-red-50' : 'border-gray-300'
-              }`}
-              placeholder="Ex: FACT-2024-0042" />
-            {isDuplicate && form.invoice_number_supplier && (
-              <p className="text-red-600 text-xs mt-1">⚠ Ce numéro de facture existe déjà pour ce fournisseur</p>
-            )}
+          {/* Info message about auto-generated invoice number */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-indigo-200 rounded-xl p-3 text-sm mb-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="h-4 w-4 text-indigo-600" />
+              <p className="font-semibold text-indigo-800 m-0">Numéro de facture auto-généré</p>
+            </div>
+            <p className="text-indigo-600 text-xs m-0">
+              Un numéro unique sera créé automatiquement au format FACT-2026-XXXX
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -340,7 +319,7 @@ export default function CreateInvoiceFromPOModal({ businessId, po, onClose }: Pr
               className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors">
               Annuler
             </button>
-            <button type="submit" disabled={create.isPending || isDuplicate}
+            <button type="submit" disabled={create.isPending}
               className="flex-1 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50">
               {create.isPending ? 'Création...' : 'Créer la facture'}
             </button>

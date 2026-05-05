@@ -1,5 +1,7 @@
 // src/pages/backoffice/Team.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import {
   Search,
   Edit,
@@ -12,8 +14,10 @@ import {
   Clock,
   Loader2,
   AlertCircle,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { usePresenceContext } from '../../context/PresenceContext';
 import { toast } from 'sonner';
 import {
   getBusinessMembers,
@@ -26,6 +30,10 @@ import {
   type Invitation,
 } from '../../api/invitations.api';
 import { getMyBusinesses } from '../../api/business.api';
+import { PermissionManagementModal } from '../../components/PermissionManagementModal';
+import { TeamMemberRowSkeleton, StatsCardSkeleton, InvitationCardSkeleton } from '../../components/collaboration/CollaborationSkeletonLoaders';
+import { teamInvitationSchema, type TeamInvitationFormData } from '../../schemas/team-invitation.schema';
+import { getAssetUrl } from '@/config/api.config';
 
 const roles = [
   {
@@ -61,12 +69,17 @@ const roleLabels: Record<string, string> = {
 
 export default function Team() {
   const { user } = useAuth();
+  const { userStatuses } = usePresenceContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [showInvite, setShowInvite] = useState(false);
   const [selectedMember, setSelectedMember] = useState<BusinessMember | null>(
     null,
   );
+  const [selectedMemberForPermissions, setSelectedMemberForPermissions] = useState<BusinessMember | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -76,9 +89,27 @@ export default function Team() {
   const [members, setMembers] = useState<BusinessMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
 
-  // Form state
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('TEAM_MEMBER');
+  // Infinite scroll state
+  const [displayedMembersCount, setDisplayedMembersCount] = useState(10);
+  const observerTarget = useRef<HTMLDivElement>(null);
+
+  // React Hook Form with Zod validation for invitation
+  const {
+    register,
+    handleSubmit: handleInviteSubmit,
+    formState: { errors, isSubmitting, touchedFields },
+    reset: resetInviteForm,
+    setError,
+  } = useForm<TeamInvitationFormData>({
+    resolver: zodResolver(teamInvitationSchema),
+    mode: 'onBlur',
+    defaultValues: {
+      email: '',
+      role: 'TEAM_MEMBER',
+      firstName: '',
+      lastName: '',
+    },
+  });
   const [editRole, setEditRole] = useState('');
 
   // Load businesses on mount
@@ -92,6 +123,18 @@ export default function Team() {
       loadMembersAndInvitations();
     }
   }, [selectedBusinessId]);
+
+  // Show skeleton for minimum 2 seconds
+  useEffect(() => {
+    if (isLoading) {
+      setShowSkeleton(true);
+    } else {
+      const timer = setTimeout(() => {
+        setShowSkeleton(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
 
   const loadBusinesses = async () => {
     try {
@@ -129,32 +172,82 @@ export default function Team() {
     }
   };
 
-  const handleSendInvitation = async () => {
-    if (!inviteEmail.trim()) {
-      toast.error('Veuillez saisir une adresse email');
-      return;
+  const filteredMembers = members.filter(
+    (member) => {
+      // Exclude current user from the list
+      if (member.user_id === user?.id) {
+        return false;
+      }
+      
+      // Apply search filter
+      return (
+        member.user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        member.user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        member.user.email.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+  );
+
+  const displayedMembers = filteredMembers.slice(0, displayedMembersCount);
+  const hasMoreMembers = displayedMembersCount < filteredMembers.length;
+
+  const activeMembers = members.filter((m) => m.is_active && m.user_id !== user?.id).length;
+  const pendingInvites = invitations.filter((i) => i.status === 'pending').length;
+
+  // Check if user can manage team (OWNER or ADMIN)
+  const canManageTeam =
+    user?.role === 'BUSINESS_OWNER' || user?.role === 'BUSINESS_ADMIN';
+
+  const isDisplayLoading = isLoading || showSkeleton;
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && displayedMembersCount < filteredMembers.length) {
+          setDisplayedMembersCount((prev) => Math.min(prev + 10, filteredMembers.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
     }
 
+    return () => {
+      if (observerTarget.current) {
+        observer.unobserve(observerTarget.current);
+      }
+    };
+  }, [displayedMembersCount, filteredMembers.length]);
+
+  const onSubmitInvitation = async (data: TeamInvitationFormData) => {
     if (!selectedBusinessId) {
       toast.error('Veuillez sélectionner une entreprise');
       return;
     }
 
     try {
-      setIsSending(true);
-      await sendInvitation(selectedBusinessId, inviteEmail, inviteRole);
-      toast.success(`Invitation envoyée à ${inviteEmail}`);
+      await sendInvitation(selectedBusinessId, data.email, data.role);
+      toast.success(`Invitation envoyée à ${data.email}`);
       setShowInvite(false);
-      setInviteEmail('');
-      setInviteRole('TEAM_MEMBER');
+      resetInviteForm();
       await loadMembersAndInvitations();
     } catch (error: any) {
-      const errorMsg =
-        error.response?.data?.message || 'Erreur lors de l\'envoi de l\'invitation';
-      toast.error(errorMsg);
+      // Handle 409 Conflict - email already exists
+      if (error.response?.status === 409) {
+        setError('email', {
+          type: 'manual',
+          message: 'This email is already a team member',
+        });
+      } else {
+        // Generic error message at the top
+        const errorMsg =
+          error.response?.data?.message || 'Erreur lors de l\'envoi de l\'invitation';
+        toast.error(errorMsg);
+      }
       console.error('Error sending invitation:', error);
-    } finally {
-      setIsSending(false);
     }
   };
 
@@ -210,30 +303,7 @@ export default function Team() {
     setEditRole(member.role);
   };
 
-  const filteredMembers = members.filter(
-    (member) => {
-      // Exclude current user from the list
-      if (member.user_id === user?.id) {
-        return false;
-      }
-      
-      // Apply search filter
-      return (
-        member.user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        member.user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        member.user.email.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-  );
-
-  const activeMembers = members.filter((m) => m.is_active && m.user_id !== user?.id).length;
-  const pendingInvites = invitations.filter((i) => i.status === 'pending').length;
-
-  // Check if user can manage team (OWNER or ADMIN)
-  const canManageTeam =
-    user?.role === 'BUSINESS_OWNER' || user?.role === 'BUSINESS_ADMIN';
-
-  if (isLoading && businesses.length === 0) {
+  if (isDisplayLoading && businesses.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
@@ -298,18 +368,28 @@ export default function Team() {
 
       {/* Stats */}
       <div className="grid sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <p className="text-sm text-gray-500 mb-1">Total membres</p>
-          <p className="text-2xl font-bold text-gray-900">{members.length}</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <p className="text-sm text-gray-500 mb-1">Membres actifs</p>
-          <p className="text-2xl font-bold text-green-600">{activeMembers}</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <p className="text-sm text-gray-500 mb-1">Invitations en attente</p>
-          <p className="text-2xl font-bold text-yellow-600">{pendingInvites}</p>
-        </div>
+        {isDisplayLoading ? (
+          <>
+            <StatsCardSkeleton />
+            <StatsCardSkeleton />
+            <StatsCardSkeleton />
+          </>
+        ) : (
+          <>
+            <div className="bg-white rounded-xl p-4 border border-gray-200">
+              <p className="text-sm text-gray-500 mb-1">Total membres</p>
+              <p className="text-2xl font-bold text-gray-900">{members.length}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 border border-gray-200">
+              <p className="text-sm text-gray-500 mb-1">Membres actifs</p>
+              <p className="text-2xl font-bold text-green-600">{activeMembers}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 border border-gray-200">
+              <p className="text-sm text-gray-500 mb-1">Invitations en attente</p>
+              <p className="text-2xl font-bold text-yellow-600">{pendingInvites}</p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Search */}
@@ -339,10 +419,16 @@ export default function Team() {
                   Rôle
                 </th>
                 <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">
+                  Permissions
+                </th>
+                <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">
                   Poste
                 </th>
                 <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">
                   Date d'ajout
+                </th>
+                <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">
+                  Présence
                 </th>
                 <th className="text-center px-6 py-4 text-sm font-medium text-gray-500">
                   Statut
@@ -355,95 +441,145 @@ export default function Team() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredMembers.map((member) => {
-                const fullName = `${member.user.firstName} ${member.user.lastName}`;
-                const initials = `${member.user.firstName[0]}${member.user.lastName[0]}`.toUpperCase();
+              {isDisplayLoading ? (
+                <>
+                  {[...Array(5)].map((_, i) => (
+                    <TeamMemberRowSkeleton key={i} />
+                  ))}
+                </>
+              ) : (
+                <>
+                  {displayedMembers.map((member) => {
+                    const fullName = `${member.user.firstName} ${member.user.lastName}`;
+                    const initials = `${member.user.firstName[0]}${member.user.lastName[0]}`.toUpperCase();
+                    const isOnline = userStatuses.get(member.user_id) === 'online';
 
-                return (
-                  <tr key={member.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden">
-                          {member.user.avatarUrl ? (
-                            <img
-                              src={`http://localhost:3001${member.user.avatarUrl}`}
-                              alt={fullName}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <span className="text-white font-medium text-sm">
-                              {initials}
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{fullName}</p>
-                          <p className="text-sm text-gray-500">{member.user.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
-                          roleColors[member.role] || roleColors.TEAM_MEMBER
-                        }`}
-                      >
-                        <Shield className="h-3.5 w-3.5" />
-                        {member.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {member.user.jobTitle || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {member.joined_at
-                        ? new Date(member.joined_at).toLocaleDateString('fr-FR')
-                        : '-'}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
-                          member.is_active
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {member.is_active ? (
-                          <>
-                            <Check className="h-3.5 w-3.5" /> Actif
-                          </>
-                        ) : (
-                          <>Inactif</>
+                    return (
+                      <tr key={member.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="relative h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden">
+                              {member.user.avatarUrl ? (
+                                <img
+                                  src={getAssetUrl(member.user.avatarUrl)}
+                                  alt={fullName}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-white font-medium text-sm">
+                                  {initials}
+                                </span>
+                              )}
+                              {/* Presence indicator on avatar */}
+                              <div className="absolute -bottom-0.5 -right-0.5">
+                                <div className={`w-3 h-3 rounded-full border-2 border-white ${
+                                  isOnline ? 'bg-green-500' : 'bg-gray-400'
+                                }`} />
+                              </div>
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{fullName}</p>
+                              <p className="text-sm text-gray-500">{member.user.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
+                              roleColors[member.role] || roleColors.TEAM_MEMBER
+                            }`}
+                          >
+                            <Shield className="h-3.5 w-3.5" />
+                            {member.role}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <code className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                            <Lock className="h-3 w-3" />
+                            {member.permissions || '------'}
+                          </code>
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {member.user.jobTitle || '-'}
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {member.joined_at
+                            ? new Date(member.joined_at).toLocaleDateString('fr-FR')
+                            : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
+                              isOnline
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            <div className={`w-2 h-2 rounded-full ${
+                              isOnline ? 'bg-green-500' : 'bg-gray-400'
+                            }`} />
+                            {isOnline ? 'En ligne' : 'Hors ligne'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
+                              member.is_active
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {member.is_active ? (
+                              <>
+                                <Check className="h-3.5 w-3.5" /> Actif
+                              </>
+                            ) : (
+                              <>Inactif</>
+                            )}
+                          </span>
+                        </td>
+                        {canManageTeam && member.role !== 'BUSINESS_OWNER' && (
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => setSelectedMemberForPermissions(member)}
+                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                title="Gérer les permissions"
+                              >
+                                <Lock className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => openEditModal(member)}
+                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                title="Modifier le rôle"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleRemoveMember(member.user_id, fullName)
+                                }
+                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Retirer du groupe"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
                         )}
-                      </span>
-                    </td>
-                    {canManageTeam && member.role !== 'BUSINESS_OWNER' && (
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => openEditModal(member)}
-                            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Modifier le rôle"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleRemoveMember(member.user_id, fullName)
-                            }
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Retirer du groupe"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
+                      </tr>
+                    );
+                  })}
+                </>
+              )}
             </tbody>
           </table>
+          {/* Infinite scroll trigger */}
+          {!isDisplayLoading && hasMoreMembers && (
+            <div ref={observerTarget} className="py-4 text-center">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-600 mx-auto" />
+            </div>
+          )}
         </div>
       </div>
 
@@ -454,31 +590,39 @@ export default function Team() {
             Invitations en attente
           </h2>
           <div className="space-y-3">
-            {invitations.map((invitation) => (
-              <div
-                key={invitation.id}
-                className="flex items-center justify-between p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-yellow-600" />
-                  <div>
-                    <p className="font-medium text-gray-900">{invitation.email}</p>
-                    <p className="text-sm text-gray-500">
-                      {invitation.role} • Expire le{' '}
-                      {new Date(invitation.expires_at).toLocaleDateString('fr-FR')}
-                    </p>
+            {isDisplayLoading ? (
+              <>
+                {[...Array(2)].map((_, i) => (
+                  <InvitationCardSkeleton key={i} />
+                ))}
+              </>
+            ) : (
+              invitations.map((invitation) => (
+                <div
+                  key={invitation.id}
+                  className="flex items-center justify-between p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <Clock className="h-5 w-5 text-yellow-600" />
+                    <div>
+                      <p className="font-medium text-gray-900">{invitation.email}</p>
+                      <p className="text-sm text-gray-500">
+                        {invitation.role} • Expire le{' '}
+                        {new Date(invitation.expires_at).toLocaleDateString('fr-FR')}
+                      </p>
+                    </div>
                   </div>
+                  {canManageTeam && (
+                    <button
+                      onClick={() => handleCancelInvitation(invitation.id)}
+                      className="px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      Annuler
+                    </button>
+                  )}
                 </div>
-                {canManageTeam && (
-                  <button
-                    onClick={() => handleCancelInvitation(invitation.id)}
-                    className="px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    Annuler
-                  </button>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}
@@ -504,13 +648,17 @@ export default function Team() {
       {/* Invite Modal */}
       {showInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl max-w-lg w-full">
+          <form onSubmit={handleInviteSubmit(onSubmitInvitation)} className="bg-white rounded-2xl max-w-lg w-full">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">
                 Inviter un membre
               </h2>
               <button
-                onClick={() => setShowInvite(false)}
+                type="button"
+                onClick={() => {
+                  setShowInvite(false);
+                  resetInviteForm();
+                }}
                 className="text-gray-400 hover:text-gray-500"
               >
                 <X className="h-6 w-6" />
@@ -519,26 +667,81 @@ export default function Team() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  {...register('firstName')}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                    errors.firstName 
+                      ? 'border-red-500' 
+                      : touchedFields.firstName 
+                      ? 'border-green-500' 
+                      : 'border-gray-300'
+                  }`}
+                  placeholder="John"
+                  disabled={isSubmitting}
+                />
+                {errors.firstName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.firstName.message}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  {...register('lastName')}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                    errors.lastName 
+                      ? 'border-red-500' 
+                      : touchedFields.lastName 
+                      ? 'border-green-500' 
+                      : 'border-gray-300'
+                  }`}
+                  placeholder="Doe"
+                  disabled={isSubmitting}
+                />
+                {errors.lastName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.lastName.message}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Adresse email
                 </label>
                 <input
                   type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  {...register('email')}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                    errors.email 
+                      ? 'border-red-500' 
+                      : touchedFields.email 
+                      ? 'border-green-500' 
+                      : 'border-gray-300'
+                  }`}
                   placeholder="email@exemple.com"
-                  disabled={isSending}
+                  disabled={isSubmitting}
                 />
+                {errors.email && (
+                  <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Rôle
                 </label>
                 <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  disabled={isSending}
+                  {...register('role')}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                    errors.role 
+                      ? 'border-red-500' 
+                      : touchedFields.role 
+                      ? 'border-green-500' 
+                      : 'border-gray-300'
+                  }`}
+                  disabled={isSubmitting}
                 >
                   {roles.map((role) => (
                     <option key={role.value} value={role.value}>
@@ -546,6 +749,9 @@ export default function Team() {
                     </option>
                   ))}
                 </select>
+                {errors.role && (
+                  <p className="mt-1 text-sm text-red-600">{errors.role.message}</p>
+                )}
               </div>
               <div className="bg-indigo-50 rounded-lg p-4">
                 <p className="text-sm text-indigo-800">
@@ -556,18 +762,22 @@ export default function Team() {
             </div>
             <div className="p-6 border-t border-gray-200 flex gap-3">
               <button
-                onClick={() => setShowInvite(false)}
-                disabled={isSending}
+                type="button"
+                onClick={() => {
+                  setShowInvite(false);
+                  resetInviteForm();
+                }}
+                disabled={isSubmitting}
                 className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Annuler
               </button>
               <button
-                onClick={handleSendInvitation}
-                disabled={isSending}
-                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                type="submit"
+                disabled={isSubmitting || Object.keys(errors).length > 0}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSending ? (
+                {isSubmitting ? (
                   <>
                     <Loader2 className="h-5 w-5 animate-spin" />
                     Envoi...
@@ -580,7 +790,7 @@ export default function Team() {
                 )}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -604,7 +814,7 @@ export default function Team() {
                 <div className="h-16 w-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden">
                   {selectedMember.user.avatarUrl ? (
                     <img
-                      src={`http://localhost:3001${selectedMember.user.avatarUrl}`}
+                      src={getAssetUrl(selectedMember.user.avatarUrl)}
                       alt={`${selectedMember.user.firstName} ${selectedMember.user.lastName}`}
                       className="h-full w-full object-cover"
                     />
@@ -664,6 +874,17 @@ export default function Team() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Permission Management Modal */}
+      {selectedMemberForPermissions && (
+        <PermissionManagementModal
+          member={selectedMemberForPermissions}
+          businessId={selectedBusinessId}
+          isOpen={!!selectedMemberForPermissions}
+          onClose={() => setSelectedMemberForPermissions(null)}
+          onSuccess={loadMembersAndInvitations}
+        />
       )}
     </div>
   );

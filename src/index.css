@@ -1,6 +1,41 @@
+/* Import des styles pour la navigation au clavier */
+@import './styles/keyboard-navigation.css';
+
+/* Import des styles pour le mode lecture - APRÈS Tailwind pour priorité */
+@import './styles/reading-mode.css';
+
+/* Import des thèmes de couleur pour daltonisme */
+@import './styles/color-themes.css';
+/* Leaflet CSS */
+@import 'leaflet/dist/leaflet.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+
+/* Screen Reader Only - Masquer visuellement mais garder accessible */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
 
 @layer base {
   :root {
@@ -42,6 +77,22 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Prevent scroll reset on navigation */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Maintain scroll position in main content */
+  main {
+    overflow-anchor: auto;
+  }
+  
+  /* Prevent sidebar from scrolling to top on navigation */
+  nav[role="navigation"] {
+    overflow-anchor: auto;
+    scroll-behavior: auto;
   }
 }
 
@@ -281,4 +332,21 @@ img {
 
 .fixed {
   position: fixed;
+}
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s ease-in-out infinite;
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-float-slow {
+  animation: float-slow 3s ease-in-out infinite;
 }

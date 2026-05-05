@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useCurrentBusinessMember } from '@/hooks/useCurrentBusinessMember';
 import { useSalesInvoices } from '@/hooks/useSalesInvoices';
 import {
   SalesInvoice,
@@ -117,6 +118,13 @@ function SummaryCards({ invoices }: { invoices: SalesInvoice[] }) {
 export default function TreasuryInvoicesPage() {
   const { user } = useAuth();
   const businessId = (user as any)?.business_id ?? '';
+  const { businessMember } = useCurrentBusinessMember();
+
+  // Permission checks
+  // BUSINESS_OWNER bypasses all permission checks
+  const isOwner = user?.role === 'BUSINESS_OWNER' || businessMember?.role === 'BUSINESS_OWNER';
+  const pay = businessMember?.payment_permissions;
+  const canCreateClientPayment = isOwner || pay?.create_client_payment === true;
 
   const [page, setPage] = useState(1);
   const [sortField, setSortField] = useState<string>('due_date');
@@ -300,13 +308,15 @@ export default function TreasuryInvoicesPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => setPaymentInvoice(inv)}
-                            title="Enregistrer un encaissement"
-                            className="p-1.5 hover:bg-green-50 rounded-lg text-gray-500 hover:text-green-600 transition-colors"
-                          >
-                            <CreditCard className="h-4 w-4" />
-                          </button>
+                          {canCreateClientPayment && (
+                            <button
+                              onClick={() => setPaymentInvoice(inv)}
+                              title="Enregistrer un encaissement"
+                              className="p-1.5 hover:bg-green-50 rounded-lg text-gray-500 hover:text-green-600 transition-colors"
+                            >
+                              <CreditCard className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
 

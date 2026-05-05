@@ -1,0 +1,368 @@
+/* ============================================
+   Styles pour la Navigation au Clavier
+   ============================================ */
+
+/* ═══════════════════════════════════════════
+   FOCUS RINGS AMÉLIORÉS - Plus Visibles
+   ═══════════════════════════════════════════ */
+
+/* Focus rings visibles pour tous les éléments interactifs */
+*:focus {
+  outline: 3px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Focus-visible (uniquement clavier, pas souris) */
+*:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+  transition: box-shadow 0.2s ease, outline 0.2s ease;
+}
+
+/* Désactiver les focus rings pour les clics souris */
+*:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════
+   FOCUS SPÉCIFIQUES PAR TYPE D'ÉLÉMENT
+   ═══════════════════════════════════════════ */
+
+/* Boutons - Focus ring épais et visible */
+button:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+}
+
+/* Boutons primaires - Focus ring blanc pour contraste */
+button.bg-indigo-600:focus-visible,
+button.bg-indigo-500:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.3);
+}
+
+/* Liens - Focus ring avec bordure arrondie */
+a:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+/* Inputs et champs de formulaire */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: 0;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+  border-radius: 8px;
+}
+
+/* Inputs avec erreur */
+input[aria-invalid="true"]:focus-visible,
+textarea[aria-invalid="true"]:focus-visible {
+  outline: 3px solid #ef4444;
+  border-color: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15);
+}
+
+/* ═══════════════════════════════════════════
+   NAVIGATION ET MENUS
+   ═══════════════════════════════════════════ */
+
+/* Éléments de navigation dans la sidebar */
+.sidebar-nav-item:focus-visible,
+.sidebar-submenu-item:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: -3px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+/* Navigation active avec focus */
+.sidebar-nav-item.active:focus-visible,
+.sidebar-submenu-item.active:focus-visible {
+  outline: 3px solid #4f46e5;
+  box-shadow: inset 0 0 0 3px rgba(79, 70, 229, 0.3);
+}
+
+/* Menus déroulants */
+[role="menu"]:focus-visible,
+[role="menuitem"]:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: -2px;
+  border-radius: 6px;
+  background-color: rgba(99, 102, 241, 0.05);
+}
+
+/* ═══════════════════════════════════════════
+   BOUTONS ICÔNES ET ACTIONS
+   ═══════════════════════════════════════════ */
+
+/* Boutons icônes (notifications, profil, etc.) */
+button[aria-label]:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 12px;
+  box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.2);
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}
+
+/* Boutons de fermeture (X) */
+button[aria-label*="Fermer"]:focus-visible,
+button[aria-label*="fermer"]:focus-visible {
+  outline: 3px solid #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15);
+}
+
+/* ═══════════════════════════════════════════
+   MODALS ET DIALOGS
+   ═══════════════════════════════════════════ */
+
+/* Modals */
+[role="dialog"]:focus-visible,
+[role="alertdialog"]:focus-visible {
+  outline: 4px solid #6366f1;
+  outline-offset: -4px;
+  border-radius: 16px;
+}
+
+/* ═══════════════════════════════════════════
+   TABLEAUX ET LISTES
+   ═══════════════════════════════════════════ */
+
+/* Lignes de tableau focusables */
+table tr:focus-within {
+  background-color: rgba(99, 102, 241, 0.08);
+  outline: 2px solid rgba(99, 102, 241, 0.3);
+  outline-offset: -2px;
+}
+
+table button:focus-visible,
+table a:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Éléments de liste */
+[role="listitem"]:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: -2px;
+  border-radius: 8px;
+  background-color: rgba(99, 102, 241, 0.05);
+}
+
+/* ═══════════════════════════════════════════
+   ONGLETS ET ACCORDÉONS
+   ═══════════════════════════════════════════ */
+
+/* Onglets */
+[role="tab"]:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: -2px;
+  border-radius: 8px 8px 0 0;
+  z-index: 1;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+/* Onglet sélectionné */
+[role="tab"][aria-selected="true"]:focus-visible {
+  outline: 3px solid #4f46e5;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.2);
+}
+
+/* Accordéons */
+[role="button"][aria-expanded]:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+/* ═══════════════════════════════════════════
+   ÉLÉMENTS DE FORMULAIRE PERSONNALISÉS
+   ═══════════════════════════════════════════ */
+
+/* Checkboxes et radios personnalisés */
+[role="checkbox"]:focus-visible,
+[role="radio"]:focus-visible,
+[role="switch"]:focus-visible {
+  outline: 3px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.2);
+}
+
+/* ═══════════════════════════════════════════
+   SKIP TO CONTENT LINK
+   ═══════════════════════════════════════════ */
+
+.skip-to-content {
+  position: absolute;
+  top: -50px;
+  left: 0;
+  background: #6366f1;
+  color: white;
+  padding: 12px 24px;
+  text-decoration: none;
+  border-radius: 0 0 8px 0;
+  z-index: 9999;
+  font-weight: 700;
+  font-size: 16px;
+  transition: top 0.3s ease;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.skip-to-content:focus {
+  top: 0;
+  outline: 3px solid white;
+  outline-offset: -4px;
+}
+
+/* ═══════════════════════════════════════════
+   ANIMATIONS ET TRANSITIONS
+   ═══════════════════════════════════════════ */
+
+/* Animation de pulsation pour le focus */
+@keyframes focusPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.1);
+  }
+}
+
+/* Animation de glow pour les éléments importants */
+@keyframes focusGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.3), 0 0 20px rgba(99, 102, 241, 0.2);
+  }
+}
+
+/* Appliquer l'animation aux boutons primaires */
+button.bg-indigo-600:focus-visible,
+button.bg-indigo-500:focus-visible {
+  animation: focusGlow 2s ease-in-out infinite;
+}
+
+/* Transition douce pour tous les focus */
+*:focus-visible {
+  transition: outline 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+/* ═══════════════════════════════════════════
+   MODE HIGH CONTRAST
+   ═══════════════════════════════════════════ */
+
+@media (prefers-contrast: high) {
+  *:focus-visible {
+    outline-width: 4px;
+    outline-color: #000;
+    outline-style: solid;
+    box-shadow: none;
+  }
+  
+  button:focus-visible,
+  a:focus-visible {
+    outline-width: 4px;
+    outline-color: #000;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   MODE DARK
+   ═══════════════════════════════════════════ */
+
+@media (prefers-color-scheme: dark) {
+  *:focus-visible {
+    outline-color: #818cf8;
+    box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.2);
+  }
+  
+  button:focus-visible {
+    outline-color: #818cf8;
+    box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.25);
+  }
+  
+  .skip-to-content {
+    background: #818cf8;
+  }
+  
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline-color: #818cf8;
+    border-color: #818cf8;
+    box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.2);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   REDUCED MOTION
+   ═══════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *:focus-visible {
+    animation: none;
+    transition: none;
+  }
+  
+  button:focus-visible {
+    animation: none;
+    transform: none;
+  }
+  
+  .skip-to-content {
+    transition: none;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   FOCUS INDICATORS POUR ÉTATS SPÉCIAUX
+   ═══════════════════════════════════════════ */
+
+/* Éléments désactivés - pas de focus */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  outline: none;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Éléments en chargement */
+[aria-busy="true"]:focus-visible {
+  outline: 3px dashed #6366f1;
+  animation: focusPulse 1.5s ease-in-out infinite;
+}
+
+/* Éléments avec erreur */
+[aria-invalid="true"]:focus-visible {
+  outline: 3px solid #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+}
+
+/* Éléments requis */
+[aria-required="true"]:focus-visible {
+  outline: 3px solid #6366f1;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), inset 0 0 0 1px #f59e0b;
+}

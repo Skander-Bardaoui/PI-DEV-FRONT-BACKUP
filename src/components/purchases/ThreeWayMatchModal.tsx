@@ -1,5 +1,5 @@
 // src/components/purchases/ThreeWayMatchModal.tsx
-// Modal de rapport de rapprochement 3 voies
+// Modal de rapport de contrôle de facture
 // Usage : <ThreeWayMatchModal businessId={bId} invoiceId={inv.id} onClose={() => ...} />
 
 import { useState } from 'react';
@@ -90,7 +90,7 @@ export default function ThreeWayMatchModal({ businessId, invoiceId, onClose }: P
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', gap: 10, position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
           <FileText size={20} color="#4F46E5" />
           <div style={{ flex: 1 }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Rapprochement 3 voies</h2>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Contrôle de Facture</h2>
             <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6B7280' }}>Vérification automatique : BC ↔ Réception ↔ Facture</p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}>
@@ -103,7 +103,7 @@ export default function ThreeWayMatchModal({ businessId, invoiceId, onClose }: P
           <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
             <p style={{ fontSize: 13, fontWeight: 600, color: '#0369A1', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
               <FileText size={16} />
-              Qu'est-ce que le rapprochement 3 voies ?
+              Qu'est-ce que le contrôle de facture ?
             </p>
             <p style={{ fontSize: 12, color: '#075985', margin: '0 0 8px', lineHeight: 1.5 }}>
               Le système compare automatiquement 3 documents pour détecter les écarts :

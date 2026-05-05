@@ -94,6 +94,22 @@ export default function CorrectInvoiceModal({ businessId, invoice, onClose }: Pr
   const hasChanged = Math.abs(diff) > 0.001 || receiptUrl !== (invoice.receipt_url ?? '');
 
   const handleCorrectAmounts = async () => {
+    // Validation
+    const errors: string[] = [];
+    
+    if (subtotalHT < 0) errors.push('Le sous-total HT ne peut pas être négatif');
+    if (taxAmount < 0) errors.push('La TVA ne peut pas être négative');
+    if (timbre < 0) errors.push('Le timbre fiscal ne peut pas être négatif');
+    if (!invoiceDate) errors.push('La date de facture est obligatoire');
+    if (dueDate && invoiceDate && new Date(dueDate) < new Date(invoiceDate)) {
+      errors.push('La date d\'échéance doit être postérieure à la date de facture');
+    }
+    
+    if (errors.length > 0) {
+      setError(errors.join('. '));
+      return;
+    }
+    
     if (!hasChanged) { setError('Aucune modification détectée'); return; }
     setError('');
     try {
@@ -104,7 +120,6 @@ export default function CorrectInvoiceModal({ businessId, invoice, onClose }: Pr
         timbre_fiscal: timbre,
         invoice_date:  invoiceDate  || undefined,
         due_date:      dueDate      || undefined,
-        // FONCTIONNALITÉ 2 : envoyer le nouveau scan si uploadé
         receipt_url:   receiptUrl   || undefined,
       });
       onClose();
@@ -116,7 +131,17 @@ export default function CorrectInvoiceModal({ businessId, invoice, onClose }: Pr
 
   const handleMarkAsPaid = async () => {
     setError('');
-    if (paidAmount <= 0) { setError('Le montant payé doit être supérieur à 0'); return; }
+    
+    // Validation
+    if (paidAmount <= 0) { 
+      setError('Le montant payé doit être supérieur à 0'); 
+      return; 
+    }
+    if (paidAmount > round3(Number(invoice.net_amount) - Number(invoice.paid_amount))) {
+      setError('Le montant ne peut pas dépasser le solde restant');
+      return;
+    }
+    
     try {
       await resolve.mutateAsync(invoice.id);
       const newTotalPaid = round3(Number(invoice.paid_amount) + paidAmount);

@@ -17,13 +17,20 @@ const Field = ({
       {label} {required && <span className="text-red-500">*</span>}
     </label>
     {children}
-    {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+    {error && (
+      <div className="flex items-start gap-1.5 mt-1.5">
+        <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+        </svg>
+        <p className="text-red-600 text-xs font-medium">{error}</p>
+      </div>
+    )}
   </div>
 );
 
 const inputCls = (error?: string) =>
-  `w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm ${
-    error ? 'border-red-400 bg-red-50' : 'border-gray-300'
+  `w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm transition-colors ${
+    error ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200' : 'border-gray-300'
   }`;
 
 interface Props {
@@ -42,9 +49,12 @@ export default function SupplierModal({ businessId, supplier, onClose }: Props) 
     register,
     handleSubmit,
     reset,
+    trigger,
     formState: { errors, isSubmitting },
   } = useForm<SupplierFormValues>({
     resolver: zodResolver(supplierSchema),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: {
       name:             '',
       matricule_fiscal: '',
@@ -82,13 +92,62 @@ export default function SupplierModal({ businessId, supplier, onClose }: Props) 
   }, [supplier, reset]);
 
   const onSubmit = async (values: SupplierFormValues) => {
-    // Nettoyer les champs vides
-    const dto = Object.fromEntries(
-      Object.entries(values).filter(([, v]) => v !== '' && v !== undefined),
-    );
-    if (isEdit) await update.mutateAsync(dto as any);
-    else        await create.mutateAsync(dto as any);
-    onClose();
+    try {
+      // Prepare the DTO with proper data structure
+      const dto: any = {
+        name: values.name,
+        matricule_fiscal: values.matricule_fiscal,
+        email: values.email,
+        phone: values.phone,
+        rib: values.rib,
+        bank_name: values.bank_name,
+        payment_terms: values.payment_terms,
+        category: values.category,
+      };
+
+      // Only add notes if not empty
+      if (values.notes && values.notes.trim()) {
+        dto.notes = values.notes;
+      }
+
+      // Only add address if all required fields are present
+      if (values.address && 
+          values.address.street && 
+          values.address.city && 
+          values.address.postal_code && 
+          values.address.country) {
+        dto.address = {
+          street: values.address.street,
+          city: values.address.city,
+          postal_code: values.address.postal_code,
+          country: values.address.country,
+        };
+      }
+
+      if (isEdit) await update.mutateAsync(dto);
+      else        await create.mutateAsync(dto);
+      onClose();
+    } catch (error) {
+      console.error('Erreur lors de la soumission:', error);
+    }
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // Déclencher la validation de tous les champs
+    const isValid = await trigger();
+    if (!isValid) {
+      // Scroll vers la première erreur
+      const firstErrorField = Object.keys(errors)[0];
+      if (firstErrorField) {
+        const element = document.querySelector(`[name="${firstErrorField}"]`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    } else {
+      handleSubmit(onSubmit)();
+    }
   };
 
   return (
@@ -103,7 +162,28 @@ export default function SupplierModal({ businessId, supplier, onClose }: Props) 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4" noValidate>
+        <form onSubmit={handleFormSubmit} className="p-6 space-y-4" noValidate>
+
+          {/* Message d'erreur global */}
+          {Object.keys(errors).length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-red-800 mb-1">
+                    Erreurs de validation
+                  </h3>
+                  <p className="text-sm text-red-700">
+                    Veuillez corriger les erreurs ci-dessous avant de continuer.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <Field label={t('suppliers.name')} error={errors.name?.message} required>
             <input {...register('name')} className={inputCls(errors.name?.message)}
@@ -111,22 +191,22 @@ export default function SupplierModal({ businessId, supplier, onClose }: Props) 
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label={t('suppliers.taxId')} error={errors.matricule_fiscal?.message}>
+            <Field label={t('suppliers.taxId')} error={errors.matricule_fiscal?.message} required>
               <input {...register('matricule_fiscal')} className={inputCls(errors.matricule_fiscal?.message)}
                 placeholder="1234567/A/B/C/000" style={{ fontFamily: 'monospace' }} />
             </Field>
-            <Field label={t('suppliers.category')} error={errors.category?.message}>
+            <Field label={t('suppliers.category')} error={errors.category?.message} required>
               <input {...register('category')} className={inputCls(errors.category?.message)}
                 placeholder={t('suppliers.categoryPlaceholder', { defaultValue: 'Matières premières, IT...' })} />
             </Field>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label={t('suppliers.email')} error={errors.email?.message}>
+            <Field label={t('suppliers.email')} error={errors.email?.message} required>
               <input {...register('email')} type="email" className={inputCls(errors.email?.message)}
                 placeholder="contact@fournisseur.tn" />
             </Field>
-            <Field label={t('suppliers.phone')} error={errors.phone?.message}>
+            <Field label={t('suppliers.phone')} error={errors.phone?.message} required>
               <input {...register('phone')} className={inputCls(errors.phone?.message)}
                 placeholder="+216 71 000 000" />
             </Field>
@@ -134,21 +214,65 @@ export default function SupplierModal({ businessId, supplier, onClose }: Props) 
 
           {/* Adresse */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('suppliers.address')}</label>
-            <input {...register('address.street')} className={`${inputCls()} mb-2`} placeholder={t('suppliers.street', { defaultValue: 'Rue' })} />
-            <div className="grid grid-cols-3 gap-2">
-              <input {...register('address.city')}        className={inputCls()} placeholder={t('suppliers.city', { defaultValue: 'Ville' })} />
-              <input {...register('address.postal_code')} className={inputCls()} placeholder={t('suppliers.postalCode', { defaultValue: 'Code postal' })} />
-              <input {...register('address.country')}     className={inputCls()} placeholder={t('suppliers.country', { defaultValue: 'Pays' })} />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('suppliers.address')} <span className="text-red-500">*</span>
+            </label>
+            <div className="space-y-2">
+              <div>
+                <input {...register('address.street')} className={inputCls(errors.address?.street?.message)} placeholder={t('suppliers.street', { defaultValue: 'Rue' })} />
+                {errors.address?.street && (
+                  <div className="flex items-start gap-1.5 mt-1.5">
+                    <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-red-600 text-xs font-medium">{errors.address.street.message}</p>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <input {...register('address.city')} className={inputCls(errors.address?.city?.message)} placeholder={t('suppliers.city', { defaultValue: 'Ville' })} />
+                  {errors.address?.city && (
+                    <div className="flex items-start gap-1.5 mt-1.5">
+                      <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <p className="text-red-600 text-xs font-medium">{errors.address.city.message}</p>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <input {...register('address.postal_code')} className={inputCls(errors.address?.postal_code?.message)} placeholder={t('suppliers.postalCode', { defaultValue: 'Code postal' })} />
+                  {errors.address?.postal_code && (
+                    <div className="flex items-start gap-1.5 mt-1.5">
+                      <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <p className="text-red-600 text-xs font-medium">{errors.address.postal_code.message}</p>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <input {...register('address.country')} className={inputCls(errors.address?.country?.message)} placeholder={t('suppliers.country', { defaultValue: 'Pays' })} />
+                  {errors.address?.country && (
+                    <div className="flex items-start gap-1.5 mt-1.5">
+                      <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <p className="text-red-600 text-xs font-medium">{errors.address.country.message}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label={t('suppliers.rib')} error={errors.rib?.message}>
+            <Field label={t('suppliers.rib')} error={errors.rib?.message} required>
               <input {...register('rib')} className={inputCls(errors.rib?.message)}
                 placeholder="07 123 0123456789 12" style={{ fontFamily: 'monospace' }} />
             </Field>
-            <Field label={t('suppliers.bank')} error={errors.bank_name?.message}>
+            <Field label={t('suppliers.bank')} error={errors.bank_name?.message} required>
               <input {...register('bank_name')} className={inputCls(errors.bank_name?.message)}
                 placeholder="STB, BNA, BIAT..." />
             </Field>

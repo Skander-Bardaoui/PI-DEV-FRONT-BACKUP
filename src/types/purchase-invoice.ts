@@ -23,8 +23,8 @@ export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   [InvoiceStatus.PARTIALLY_PAID]: 'Partiellement payée',
   [InvoiceStatus.PAID]:           'Payée',
   [InvoiceStatus.OVERDUE]:        'En retard',
-  [InvoiceStatus.DISPUTED]:       'En litige',
-  [InvoiceStatus.CANCELLED]:       'Annuler',
+  [InvoiceStatus.DISPUTED]:       'Problème détecté',
+  [InvoiceStatus.CANCELLED]:       'Annulée',
 
 };
 
@@ -42,13 +42,15 @@ export const INVOICE_STATUS_COLORS: Record<InvoiceStatus, string> = {
 // ── Facture Fournisseur ───────────────────────────────────────────────────
 export interface PurchaseInvoice {
   id:                      string;
-  invoice_number_supplier: string;
+  invoice_number:          string;  // Numéro interne auto-généré (FACT-2026-0001)
+  invoice_number_supplier: string | null;  // Numéro du fournisseur (optionnel)
   status:                  InvoiceStatus;
   business_id:             string;
   supplier_id:             string;
   supplier:                Supplier;
   supplier_po_id:          string | null;
   supplier_po:             SupplierPO | null;
+  goods_receipt_id:        string | null;  // Lien vers le BR spécifique
   invoice_date:            string;
   due_date:                string;
   subtotal_ht:             number;
@@ -80,7 +82,7 @@ export interface CreatePurchaseInvoiceDto {
   receipt_url?:            string;
 }
 
-export interface UpdatePurchaseInvoiceDto extends Partial<Omit<CreatePurchaseInvoiceDto, 'supplier_id' | 'supplier_po_id'>> {}
+export type UpdatePurchaseInvoiceDto = Partial<Omit<CreatePurchaseInvoiceDto, 'supplier_id' | 'supplier_po_id'>>;
 
 export interface DisputeInvoiceDto {
   dispute_reason: string;

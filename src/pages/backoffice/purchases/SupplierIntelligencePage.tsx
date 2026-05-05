@@ -1,38 +1,43 @@
 // src/pages/backoffice/purchases/SupplierIntelligencePage.tsx
-// Intelligence Fournisseurs: Scoring + IA dans une expérience unifiée
+// Performance Fournisseurs: Scoring + IA dans une expérience unifiée
 
 import { useState } from 'react';
-import { Award, TrendingUp, TrendingDown, Minus, RefreshCw, Sparkles, AlertTriangle, Target, Brain, Zap } from 'lucide-react';
+import { Award, TrendingUp, TrendingDown, Minus, RefreshCw, Sparkles, AlertTriangle, Target, Brain, ChevronUp, ChevronDown, Filter } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useSupplierRanking, ScoreGrade, SupplierRanking } from '@/hooks/useSupplierScoring';
 import { useQueryClient } from '@tanstack/react-query';
 import SupplierAIInsightsModal from '@/components/purchases/SupplierAIInsightsModal';
 
+type SortField = 'rank' | 'supplier_name' | 'total_score' | 'grade';
+type SortDir   = 'asc' | 'desc';
+
 const GRADE_CONFIG: Record<ScoreGrade, { bg: string; color: string; border: string; label: string }> = {
-  A: { bg: '#F0FDF4', color: '#166534', border: '#86EFAC', label: 'Excellent' },
-  B: { bg: '#EFF6FF', color: '#1E40AF', border: '#93C5FD', label: 'Bon' },
-  C: { bg: '#FEFCE8', color: '#854D0E', border: '#FDE047', label: 'Moyen' },
-  D: { bg: '#FFF7ED', color: '#9A3412', border: '#FDBA74', label: 'Insuffisant' },
-  F: { bg: '#FEF2F2', color: '#991B1B', border: '#FCA5A5', label: 'Mauvais' },
+  A: { bg: 'bg-green-50', color: 'text-green-700', border: 'border-green-200', label: 'Excellent' },
+  B: { bg: 'bg-blue-50', color: 'text-blue-700', border: 'border-blue-200', label: 'Bon' },
+  C: { bg: 'bg-yellow-50', color: 'text-yellow-700', border: 'border-yellow-200', label: 'Moyen' },
+  D: { bg: 'bg-orange-50', color: 'text-orange-700', border: 'border-orange-200', label: 'Insuffisant' },
+  F: { bg: 'bg-red-50', color: 'text-red-700', border: 'border-red-200', label: 'Mauvais' },
 };
 
-function ScoreRing({ score, grade }: { score: number; grade: ScoreGrade }) {
+function ScoreDisplay({ score, grade }: { score: number; grade: ScoreGrade }) {
   const gcfg = GRADE_CONFIG[grade];
-  const r = 20;
-  const circ = 2 * Math.PI * r;
-  const dash = (score / 100) * circ;
-
+  
   return (
-    <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
-      <svg width="56" height="56" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="28" cy="28" r={r} fill="none" stroke="#E5E7EB" strokeWidth="5" />
-        <circle cx="28" cy="28" r={r} fill="none" stroke={gcfg.color} strokeWidth="5"
-          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
-      </svg>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: gcfg.color, lineHeight: 1 }}>{score}</span>
-        <span style={{ fontSize: 8, color: gcfg.color, fontWeight: 600 }}>{grade}</span>
+    <div className="flex items-center gap-3">
+      <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[100px]">
+        <div
+          className={`h-2 rounded-full transition-all ${
+            grade === 'A' ? 'bg-green-500' : 
+            grade === 'B' ? 'bg-blue-500' : 
+            grade === 'C' ? 'bg-yellow-500' : 
+            grade === 'D' ? 'bg-orange-500' : 'bg-red-500'
+          }`}
+          style={{ width: `${score}%` }}
+        />
       </div>
+      <span className="text-sm font-bold text-gray-900 min-w-[40px]">
+        {score}
+      </span>
     </div>
   );
 }
@@ -40,105 +45,79 @@ function ScoreRing({ score, grade }: { score: number; grade: ScoreGrade }) {
 function EnhancedRankingRow({
   item,
   onViewAI,
+  hasAIAccess,
 }: {
   item: SupplierRanking;
   onViewAI: (id: string, name: string) => void;
+  hasAIAccess?: boolean;
 }) {
   const gcfg = GRADE_CONFIG[item.grade];
   const TrendIcon = item.trend === 'up' ? TrendingUp : item.trend === 'down' ? TrendingDown : Minus;
-  const trendColor = item.trend === 'up' ? '#16A34A' : item.trend === 'down' ? '#DC2626' : '#9CA3AF';
+  const trendColor = item.trend === 'up' ? 'text-green-600' : item.trend === 'down' ? 'text-red-600' : 'text-gray-400';
 
   // Indicateurs visuels de risque basés sur le score
   const riskLevel = item.total_score >= 85 ? 'low' : item.total_score >= 70 ? 'medium' : item.total_score >= 55 ? 'high' : 'critical';
   const riskConfig = {
-    low: { icon: Target, color: '#16A34A', bg: '#F0FDF4', label: 'Fiable' },
-    medium: { icon: AlertTriangle, color: '#F59E0B', bg: '#FFFBEB', label: 'À surveiller' },
-    high: { icon: AlertTriangle, color: '#F97316', bg: '#FFF7ED', label: 'Risque' },
-    critical: { icon: AlertTriangle, color: '#DC2626', bg: '#FEF2F2', label: 'Critique' },
+    low: { icon: Target, color: 'text-green-600', bg: 'bg-green-50', label: 'Fiable', border: 'border-green-200' },
+    medium: { icon: AlertTriangle, color: 'text-yellow-600', bg: 'bg-yellow-50', label: 'À surveiller', border: 'border-yellow-200' },
+    high: { icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50', label: 'Risque', border: 'border-orange-200' },
+    critical: { icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50', label: 'Critique', border: 'border-red-200' },
   };
   const risk = riskConfig[riskLevel];
   const RiskIcon = risk.icon;
 
   return (
-    <tr className="hover:bg-gradient-to-r hover:from-indigo-50/30 hover:to-purple-50/30 transition-all duration-200 group">
+    <tr className="hover:bg-gray-50 transition-colors">
       {/* Rang avec médaille */}
       <td className="px-4 py-4">
         <div className="flex items-center gap-2">
-          <span style={{
-            width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 700,
-            background: item.rank <= 3 ? ['linear-gradient(135deg, #FFD700, #FFA500)', 'linear-gradient(135deg, #C0C0C0, #808080)', 'linear-gradient(135deg, #CD7F32, #8B4513)'][item.rank - 1] : '#F3F4F6',
-            color: item.rank <= 3 ? '#fff' : '#374151',
-            boxShadow: item.rank <= 3 ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
-          }}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+            item.rank === 1 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-white shadow-md' :
+            item.rank === 2 ? 'bg-gradient-to-br from-gray-300 to-gray-500 text-white shadow-md' :
+            item.rank === 3 ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-md' :
+            'bg-gray-100 text-gray-700'
+          }`}>
             {item.rank}
-          </span>
-          <TrendIcon size={16} color={trendColor} strokeWidth={2.5} />
+          </div>
+          <TrendIcon className={`h-4 w-4 ${trendColor}`} />
         </div>
       </td>
 
       {/* Fournisseur avec indicateur de risque */}
       <td className="px-4 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-            <p className="font-semibold text-gray-900 text-sm group-hover:text-indigo-600 transition-colors">{item.supplier_name}</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span style={{
-                fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
-                background: risk.bg, color: risk.color, display: 'inline-flex', alignItems: 'center', gap: 4,
-              }}>
-                <RiskIcon size={10} />
-                {risk.label}
-              </span>
-            </div>
-          </div>
-        </div>
-      </td>
-
-      {/* Score ring */}
-      <td className="px-4 py-4">
-        <ScoreRing score={item.total_score} grade={item.grade} />
-      </td>
-
-      {/* Barre de score améliorée */}
-      <td className="px-4 py-4" style={{ minWidth: 180 }}>
-        <div className="flex items-center gap-3">
-          <div style={{ flex: 1, height: 10, background: '#F3F4F6', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
-            <div style={{
-              height: '100%', borderRadius: 6,
-              background: `linear-gradient(90deg, ${gcfg.color}, ${gcfg.color}dd)`,
-              width: `${item.total_score}%`,
-              boxShadow: `0 0 10px ${gcfg.color}40`,
-              transition: 'width 0.5s ease',
-            }} />
-          </div>
-          <span style={{ fontSize: 13, fontWeight: 700, color: gcfg.color, minWidth: 36 }}>
-            {item.total_score}
+        <div className="flex flex-col gap-1">
+          <span className="font-medium text-gray-900 text-sm">{item.supplier_name}</span>
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${risk.bg} ${risk.color} ${risk.border} border w-fit`}>
+            <RiskIcon className="h-3 w-3" />
+            {risk.label}
           </span>
         </div>
       </td>
 
-      {/* Grade badge amélioré */}
-      <td className="px-4 py-4 text-center">
-        <span style={{
-          padding: '6px 16px', borderRadius: 24, fontSize: 12, fontWeight: 700,
-          background: gcfg.bg, color: gcfg.color, border: `2px solid ${gcfg.border}`,
-          boxShadow: `0 2px 8px ${gcfg.color}20`,
-        }}>
+      {/* Score avec barre de progression */}
+      <td className="px-4 py-4">
+        <ScoreDisplay score={item.total_score} grade={item.grade} />
+      </td>
+
+      {/* Grade badge */}
+      <td className="px-4 py-4">
+        <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full ${gcfg.bg} ${gcfg.color} ${gcfg.border} border`}>
           {item.grade} — {gcfg.label}
         </span>
       </td>
 
-      {/* Actions - icône simple avec tooltip */}
+      {/* Actions */}
       <td className="px-4 py-4">
         <div className="flex items-center justify-center">
-          <button
-            onClick={e => { e.stopPropagation(); onViewAI(item.supplier_id, item.supplier_name); }}
-            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-            title="Score IA"
-          >
-            <Sparkles size={18} />
-          </button>
+          {hasAIAccess && (
+            <button
+              onClick={() => onViewAI(item.supplier_id, item.supplier_name)}
+              className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+              title="Analyse IA détaillée"
+            >
+              <Sparkles className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </td>
     </tr>
@@ -155,6 +134,15 @@ export default function SupplierIntelligencePage() {
   const [aiModal, setAiModal] = useState<{ id: string; name: string } | null>(null);
   const [gradeFilter, setGradeFilter] = useState<ScoreGrade | ''>('');
   const [viewMode, setViewMode] = useState<'all' | 'top' | 'risk'>('all');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 20;
+
+  // ── Tri ───────────────────────────────────────────────────────────────────
+  const [sortField, setSortField] = useState<SortField>('rank');
+  const [sortDir,   setSortDir]   = useState<SortDir>('asc');
 
   const filtered = gradeFilter
     ? ranking.filter(r => r.grade === gradeFilter)
@@ -163,6 +151,41 @@ export default function SupplierIntelligencePage() {
     : viewMode === 'risk'
     ? ranking.filter(r => r.total_score < 55)
     : ranking;
+
+  // ── Tri local ─────────────────────────────────────────────────────────────
+  const sorted = [...filtered].sort((a, b) => {
+    let va: any, vb: any;
+    if (sortField === 'grade') {
+      // Ordre alphabétique pour les grades
+      va = a.grade;
+      vb = b.grade;
+    } else {
+      va = a[sortField];
+      vb = b[sortField];
+    }
+    if (va < vb) return sortDir === 'asc' ? -1 : 1;
+    if (va > vb) return sortDir === 'asc' ?  1 : -1;
+    return 0;
+  });
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const totalPages = Math.ceil(sorted.length / itemsPerPage);
+  const paginatedData = sorted.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('asc'); }
+    setPage(1); // Reset à la page 1 lors du tri
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField === field) {
+      return sortDir === 'asc' 
+        ? <ChevronUp className="h-3 w-3 inline ml-1" /> 
+        : <ChevronDown className="h-3 w-3 inline ml-1" />;
+    }
+    return <span className="h-3 w-3 inline ml-1 opacity-30">↕</span>;
+  };
 
   const grades: Record<ScoreGrade, number> = { A: 0, B: 0, C: 0, D: 0, F: 0 };
   ranking.forEach(r => grades[r.grade]++);
@@ -177,127 +200,185 @@ export default function SupplierIntelligencePage() {
   return (
     <div className="space-y-6">
 
-      {/* Header avec couleurs douces */}
-      <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-2xl p-6 border-2 border-indigo-100 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <Brain className="h-6 w-6 text-indigo-600" />
-              </div>
-              <h1 className="text-3xl font-bold text-gray-900">Intelligence Fournisseurs</h1>
+      {/* Header simplifié et cohérent */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Performance Fournisseurs</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {ranking.length} fournisseur(s) analysé(s) • Scoring automatique + IA
+          </p>
+        </div>
+        <button
+          onClick={() => qc.invalidateQueries({ queryKey: ['supplier-ranking', businessId] })}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Recalculer
+        </button>
+      </div>
+
+      {/* KPIs Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Score Moyen</p>
+              <p className="text-3xl font-bold text-gray-900">{avgScore}</p>
+              <p className="text-xs text-gray-400 mt-1">Sur 100</p>
             </div>
-            <p className="text-gray-600 text-sm flex items-center gap-2">
-              <Sparkles size={14} className="text-indigo-500" />
-              {ranking.length} fournisseur(s) analysé(s) • Scoring + IA
-            </p>
+            <div className="p-3 bg-indigo-50 rounded-lg">
+              <Brain className="h-6 w-6 text-indigo-600" />
+            </div>
           </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Top Performers</p>
+              <p className="text-3xl font-bold text-green-600">{topPerformers}</p>
+              <p className="text-xs text-gray-400 mt-1">Score ≥ 85</p>
+            </div>
+            <div className="p-3 bg-green-50 rounded-lg">
+              <Award className="h-6 w-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500 mb-1">À Risque</p>
+              <p className="text-3xl font-bold text-orange-600">{atRisk}</p>
+              <p className="text-xs text-gray-400 mt-1">Score &lt; 55</p>
+            </div>
+            <div className="p-3 bg-orange-50 rounded-lg">
+              <AlertTriangle className="h-6 w-6 text-orange-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filtres */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => qc.invalidateQueries({ queryKey: ['supplier-ranking', businessId] })}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium transition-all border border-gray-200 text-gray-700 shadow-sm"
+            onClick={() => setShowFilters(f => !f)}
+            className={`inline-flex items-center gap-2 px-4 py-2 border rounded-lg text-sm transition-colors ${
+              gradeFilter || viewMode !== 'all'
+                ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
           >
-            <RefreshCw className="h-4 w-4" /> Recalculer
+            <Filter className="h-4 w-4" />
+            Filtres {(gradeFilter || viewMode !== 'all') && '(actifs)'}
           </button>
         </div>
-
-        {/* KPIs dans le header - couleurs très douces */}
-        <div className="grid grid-cols-3 gap-4 mt-6">
-          <div className="bg-white rounded-xl p-4 border border-indigo-100 shadow-sm">
-            <p className="text-xs text-gray-600 mb-1 font-medium">Score Moyen</p>
-            <p className="text-3xl font-bold text-indigo-600">{avgScore}</p>
-            <p className="text-xs text-gray-500 mt-1">Sur 100</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-green-100 shadow-sm">
-            <p className="text-xs text-gray-600 mb-1 flex items-center gap-1 font-medium">
-              <Award size={12} className="text-green-600" /> Top Performers
-            </p>
-            <p className="text-3xl font-bold text-green-600">{topPerformers}</p>
-            <p className="text-xs text-gray-500 mt-1">Score ≥ 85</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-orange-100 shadow-sm">
-            <p className="text-xs text-gray-600 mb-1 flex items-center gap-1 font-medium">
-              <AlertTriangle size={12} className="text-orange-600" /> À Risque
-            </p>
-            <p className="text-3xl font-bold text-orange-600">{atRisk}</p>
-            <p className="text-xs text-gray-500 mt-1">Score &lt; 55</p>
-          </div>
-        </div>
       </div>
 
-      {/* Filtres et vues */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        {/* Filtres par grade */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-600">Filtrer:</span>
-          {(['A', 'B', 'C', 'D', 'F'] as ScoreGrade[]).map(g => {
-            const gcfg = GRADE_CONFIG[g];
-            return (
-              <button
-                key={g}
-                onClick={() => setGradeFilter(f => f === g ? '' : g)}
-                style={{
-                  border: `2px solid ${gradeFilter === g ? gcfg.color : '#E5E7EB'}`,
-                  background: gradeFilter === g ? gcfg.bg : '#fff',
-                  color: gradeFilter === g ? gcfg.color : '#6B7280',
-                }}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:scale-105"
-              >
-                {g} ({grades[g]})
-              </button>
-            );
-          })}
-        </div>
+      {/* Filtres dépliables */}
+      {showFilters && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+          <div className="flex flex-col gap-4">
+            {/* Filtres par grade */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">Filtrer par grade</label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {(['A', 'B', 'C', 'D', 'F'] as ScoreGrade[]).map(g => {
+                  const gcfg = GRADE_CONFIG[g];
+                  return (
+                    <button
+                      key={g}
+                      onClick={() => { setGradeFilter(f => f === g ? '' : g); setPage(1); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                        gradeFilter === g
+                          ? `${gcfg.bg} ${gcfg.color} ${gcfg.border}`
+                          : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {g} ({grades[g]})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-        {/* Modes de vue */}
-        <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-          {[
-            { value: 'all', label: 'Tous', icon: Award },
-            { value: 'top', label: 'Top 5', icon: Zap },
-            { value: 'risk', label: 'À Risque', icon: AlertTriangle },
-          ].map(({ value, label, icon: Icon }) => (
+            {/* Modes de vue */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">Vue rapide</label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  { value: 'all', label: 'Tous les fournisseurs', icon: Brain },
+                  { value: 'top', label: 'Top 5', icon: Award },
+                  { value: 'risk', label: 'À Risque (< 55)', icon: AlertTriangle },
+                ].map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => { setViewMode(value as any); setPage(1); }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all inline-flex items-center gap-1 border ${
+                      viewMode === value
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Icon className="h-3 w-3" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {(gradeFilter || viewMode !== 'all') && (
             <button
-              key={value}
-              onClick={() => setViewMode(value as any)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all inline-flex items-center gap-1 ${
-                viewMode === value
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              onClick={() => { setGradeFilter(''); setViewMode('all'); setPage(1); }}
+              className="text-sm text-red-600 hover:text-red-700 underline"
             >
-              <Icon size={12} />
-              {label}
+              Effacer tous les filtres
             </button>
-          ))}
+          )}
         </div>
-      </div>
+      )}
 
-      {/* Tableau amélioré */}
-      <div className="bg-white rounded-2xl border-2 border-gray-200 overflow-hidden shadow-lg">
+      {/* Tableau */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent mb-4" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4" />
             <p className="text-gray-500 text-sm">Analyse en cours...</p>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : sorted.length === 0 ? (
           <div className="text-center py-16">
-            <Award className="h-16 w-16 text-gray-200 mx-auto mb-4" />
-            <p className="text-gray-400 font-medium">Aucun fournisseur à afficher</p>
-            <p className="text-gray-300 text-sm mt-1">Modifiez vos filtres</p>
+            <Award className="h-12 w-12 text-gray-200 mx-auto mb-4" />
+            <p className="text-gray-500 font-medium">Aucun fournisseur à afficher</p>
+            <p className="text-gray-400 text-sm mt-1">Modifiez vos filtres</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+              <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  {['Rang', 'Fournisseur', 'Score', 'Performance', 'Grade', 'Actions'].map(h => (
-                    <th key={h} className="text-left px-4 py-4 text-xs font-bold text-gray-700 uppercase tracking-wider">
-                      {h}
+                  {[
+                    { label: 'Rang',        field: 'rank'          as SortField },
+                    { label: 'Fournisseur', field: 'supplier_name' as SortField },
+                    { label: 'Score',       field: 'total_score'   as SortField },
+                  ].map(col => (
+                    <th key={col.field}
+                      onClick={() => toggleSort(col.field)}
+                      className="text-left px-4 py-4 text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100 select-none transition-colors">
+                      {col.label}<SortIcon field={col.field} />
                     </th>
                   ))}
+                  <th 
+                    onClick={() => toggleSort('grade')}
+                    className="text-left px-4 py-4 text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100 select-none transition-colors">
+                    Grade<SortIcon field="grade" />
+                  </th>
+                  <th className="text-center px-4 py-4 text-sm font-semibold text-gray-900">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map(item => (
+                {paginatedData.map(item => (
                   <EnhancedRankingRow
                     key={item.supplier_id}
                     item={item}
@@ -306,6 +387,77 @@ export default function SupplierIntelligencePage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {sorted.length > 0 && (
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <p className="text-sm text-gray-500">
+              {sorted.length} fournisseur(s) — page {page} / {totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              {/* Bouton première page */}
+              <button 
+                onClick={() => setPage(1)} 
+                disabled={page === 1}
+                className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs disabled:opacity-40 hover:bg-gray-100 transition-colors"
+              >
+                «
+              </button>
+
+              {/* Bouton précédent */}
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:opacity-50 hover:bg-gray-100"
+              >
+                Précédent
+              </button>
+
+              {/* Numéros de pages */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p =>
+                  p === 1 ||
+                  p === totalPages ||
+                  Math.abs(p - page) <= 1
+                )
+                .map((p, index, arr) => (
+                  <span key={p} className="flex items-center">
+                    {index > 0 && arr[index - 1] !== p - 1 && (
+                      <span className="px-1 text-gray-400">...</span>
+                    )}
+                    <button
+                      onClick={() => setPage(p)}
+                      className={`px-3 py-1 border rounded-lg text-sm transition-colors ${
+                        page === p
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'border-gray-300 hover:bg-gray-100'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  </span>
+                ))}
+
+              {/* Bouton suivant */}
+              <button
+                onClick={() => setPage(p => p + 1)}
+                disabled={page >= totalPages}
+                className="px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:opacity-50 hover:bg-gray-100"
+              >
+                Suivant
+              </button>
+
+              {/* Bouton dernière page */}
+              <button 
+                onClick={() => setPage(totalPages)} 
+                disabled={page >= totalPages}
+                className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs disabled:opacity-40 hover:bg-gray-100 transition-colors"
+              >
+                »
+              </button>
+            </div>
           </div>
         )}
       </div>

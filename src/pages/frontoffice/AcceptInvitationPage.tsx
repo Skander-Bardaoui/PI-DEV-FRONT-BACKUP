@@ -8,7 +8,6 @@ import {
   Eye, 
   EyeOff, 
   User, 
-  Phone, 
   ArrowRight, 
   AlertCircle,
   CheckCircle,
@@ -18,6 +17,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axiosInstance from '../../api/axiosInstance';
+import PhoneInput from '../../components/common/PhoneInput';
+import { getAssetUrl } from '@/config/api.config';
 
 interface InvitationDetails {
   id: string;
@@ -239,7 +240,7 @@ export default function AcceptInvitationPage() {
                 <div className="h-12 w-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
                   {invitation.business.logo ? (
                     <img
-                      src={`http://localhost:3001${invitation.business.logo}`}
+                      src={getAssetUrl(invitation.business.logo)}
                       alt={invitation.business.name}
                       className="h-full w-full object-cover rounded-lg"
                     />
@@ -332,20 +333,15 @@ export default function AcceptInvitationPage() {
             </div>
 
             {/* Phone (optional) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Téléphone (optionnel)</label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="+216 XX XXX XXX"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>
+            <PhoneInput
+              value={formData.phone}
+              onChange={(value) => setFormData({ ...formData, phone: value || '' })}
+              label="Téléphone (optionnel)"
+              placeholder="Entrez votre numéro"
+              defaultCountry="TN"
+              disabled={isSubmitting}
+              required={false}
+            />
 
             {/* Password */}
             <div>

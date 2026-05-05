@@ -67,7 +67,7 @@ export default function SupplierPortalPage() {
   const [data,     setData]     = useState<PortalData | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState('');
-  const [tab,      setTab]      = useState<'bc' | 'invoices' | 'payments'>('bc');
+  const [tab,      setTab]      = useState<'bc' | 'invoices' | 'payments' | 'disputes'>('bc');
   const [refusing, setRefusing] = useState(false);
   const [actionMsg,setActionMsg]= useState('');
   const [actionOk, setActionOk] = useState(false);

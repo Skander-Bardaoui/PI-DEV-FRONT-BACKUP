@@ -17,6 +17,7 @@ import {
 import { formatAmount, formatDate, INVOICE_STATUS_COLORS, INVOICE_STATUS_LABELS, InvoiceStatus, PurchaseInvoice, round3 } from '@/types';
 import { usePDFExport } from '@/hooks/usePDFExport';
 import CorrectInvoiceModal from '@/components/purchases/CorrectInvoiceModal';
+import { ActionButton, ActionSection } from '@/components/ui/ActionButton';
 
 interface Props {
   invoice:    PurchaseInvoice;
@@ -48,10 +49,10 @@ export default function InvoiceDetailModal({ invoice, onClose, businessId }: Pro
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
-        <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-xl">
+        <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl">
 
           {/* Header simplifié */}
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 border-b border-indigo-100">
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 border-b border-indigo-100 flex-shrink-0">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
@@ -79,7 +80,7 @@ export default function InvoiceDetailModal({ invoice, onClose, businessId }: Pro
             </div>
           </div>
 
-          <div className="overflow-y-auto max-h-[calc(90vh-180px)]">
+          <div className="overflow-y-auto flex-1">
             <div className="p-6 space-y-5">
 
               {/* Informations principales - version simplifiée */}
@@ -180,71 +181,55 @@ export default function InvoiceDetailModal({ invoice, onClose, businessId }: Pro
                 </div>
               </div>
 
-              {/* Motif litige - simplifié */}
+              {/* Motif litige - avec bouton de résolution */}
               {invoice.status === InvoiceStatus.DISPUTED && invoice.dispute_reason && (
-                <div className="bg-orange-50/50 border border-orange-200 rounded-lg p-4">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                <div className="bg-orange-50/50 border-2 border-orange-300 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-orange-900 mb-1">Motif du litige</h3>
-                      <p className="text-sm text-orange-800">{invoice.dispute_reason}</p>
+                      <h3 className="text-sm font-semibold text-orange-900 mb-2">Motif du litige</h3>
+                      <p className="text-sm text-orange-800 mb-3">{invoice.dispute_reason}</p>
+                      
+                      {/* Bouton de résolution visible */}
+                      <button
+                        onClick={() => setCorrectOpen(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm shadow-sm"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        Résoudre ce litige
+                      </button>
                     </div>
                   </div>
                 </div>
               )}
-
-              {/* Scan facture - simplifié */}
-              {invoice.receipt_url && (
-                <a
-                  href={invoice.receipt_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 p-3 bg-indigo-50/50 border border-indigo-200 rounded-lg text-indigo-600 hover:bg-indigo-100/50 transition-colors text-sm font-medium"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span>Voir le scan de la facture</span>
-                </a>
-              )}
             </div>
           </div>
 
-          {/* Footer avec boutons simplifiés */}
-          <div className="p-4 border-t border-gray-200 bg-gray-50/50">
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => exportFacture(invoice)}
-                disabled={loading}
-                className="flex-1 min-w-[180px] flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-              >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                    <span>Génération...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4" />
-                    <span>Télécharger PDF</span>
-                  </>
+          {/* Footer avec boutons */}
+          <div className="p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+            <div className="space-y-4">
+              
+              {/* Section: Documents */}
+              <ActionSection title="Documents">
+                <ActionButton
+                  icon={Download}
+                  label="Télécharger PDF"
+                  description="Générer la facture"
+                  onClick={() => exportFacture(invoice)}
+                  variant="indigo"
+                  loading={loading}
+                />
+                
+                {invoice.receipt_url && (
+                  <ActionButton
+                    icon={ExternalLink}
+                    label="Voir le scan"
+                    description="Ouvrir le document"
+                    onClick={() => window.open(invoice.receipt_url, '_blank')}
+                    variant="primary"
+                  />
                 )}
-              </button>
-
-              {invoice.status === InvoiceStatus.DISPUTED && (
-                <button
-                  onClick={() => setCorrectOpen(true)}
-                  className="flex-1 min-w-[180px] flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium"
-                >
-                  <Pencil className="h-4 w-4" />
-                  <span>Corriger / Résoudre</span>
-                </button>
-              )}
-
-              <button
-                onClick={onClose}
-                className="flex-1 min-w-[120px] px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors text-sm font-medium"
-              >
-                Fermer
-              </button>
+              </ActionSection>
             </div>
           </div>
         </div>

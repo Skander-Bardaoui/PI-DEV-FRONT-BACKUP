@@ -37,6 +37,7 @@ export const SALES_INVOICE_STATUS_COLORS: Record<SalesInvoiceStatus, string> = {
 export interface SalesInvoiceItem {
   id: string;
   invoice_id: string;
+  productId?: string;
   description: string;
   quantity: number;
   unit_price: number;
@@ -77,6 +78,7 @@ export interface SalesInvoice {
 }
 
 export interface CreateSalesInvoiceItemDto {
+  productId?: string;
   description: string;
   quantity: number;
   unit_price: number;

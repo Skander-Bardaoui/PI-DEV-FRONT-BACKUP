@@ -29,11 +29,13 @@ export function useWebSocket({ businessId, enabled = true, onNotification }: Use
   const connect = useCallback(() => {
     if (!enabled || !businessId || socketRef.current?.connected) return;
 
+    const wsUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/notifications`;
+    
     console.log('🔄 Attempting to connect WebSocket...');
     console.log('📍 Business ID:', businessId);
-    console.log('📍 Server URL:', 'http://localhost:3001/notifications');
+    console.log('📍 Server URL:', wsUrl);
 
-    const socket = io('http://localhost:3001/notifications', {
+    const socket = io(wsUrl, {
       query: { businessId },
       transports: ['websocket', 'polling'],
       reconnection: true,

@@ -73,6 +73,17 @@ export const getTransactionById = async (id: string): Promise<Transaction> => {
   return response.data;
 };
 
+export const updateFraudReview = async (
+  transactionId: string,
+  isFraud: boolean
+): Promise<Transaction> => {
+  const response = await axiosInstance.patch<Transaction>(
+    `/transactions/${transactionId}/fraud-review`,
+    { is_fraud: isFraud }
+  );
+  return response.data;
+};
+
 // ===================== SUPPLIER PAYMENTS =====================
 export interface CreateSupplierPaymentDto {
   supplier_id:          string;
@@ -93,5 +104,29 @@ export const createSupplierPayment = async (
     `/businesses/${businessId}/supplier-payments`,
     dto,
   );
+  return response.data;
+};
+
+// ===================== DEPOSITS =====================
+export interface CreateDepositDto {
+  account_id: string;
+  amount: number;
+  description?: string;
+  reference?: string;
+  notes?: string;
+  deposit_date?: string;
+}
+
+export const createDeposit = async (dto: CreateDepositDto): Promise<{
+  message: string;
+  transaction: Transaction;
+  account: {
+    id: string;
+    name: string;
+    previous_balance: number;
+    new_balance: number;
+  };
+}> => {
+  const response = await axiosInstance.post('/deposits', dto);
   return response.data;
 };

@@ -45,9 +45,12 @@ export const printSupplierStatement = (
 
   const html = `
     <div class="doc-header">
-      <div>
-        <div class="company-name">${businessName.toUpperCase()}</div>
-        ${businessMF ? `<div class="company-sub">MF : ${businessMF}</div>` : ''}
+      <div style="display:flex; align-items:center; gap:12pt;">
+        <img src="/logo.png" alt="Logo" style="width:40pt; height:40pt; border-radius:8pt; flex-shrink:0; display:block;" />
+        <div>
+          <div class="company-name">${businessName.toUpperCase()}</div>
+          ${businessMF ? `<div class="company-sub">MF : ${businessMF}</div>` : ''}
+        </div>
       </div>
       <div class="doc-info">
         <div class="doc-type">Relevé de compte fournisseur</div>

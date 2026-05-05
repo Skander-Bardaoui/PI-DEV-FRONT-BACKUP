@@ -44,9 +44,18 @@ export const useCreateSalesOrder = (businessId: string) => {
 
 export const useUpdateSalesOrder = (businessId: string, id: string) => {
   const qc = useQueryClient();
+  const toast = useToast();
+  
   return useMutation({
     mutationFn: (dto: UpdateSalesOrderDto) => updateSalesOrder(businessId, id, dto),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [SALES_ORDERS_KEY, businessId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [SALES_ORDERS_KEY, businessId] });
+      toast.success('Commande modifiée', 'La commande a été modifiée avec succès');
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || 'Erreur lors de la modification de la commande';
+      toast.error('Erreur de modification', errorMessage);
+    },
   });
 };
 

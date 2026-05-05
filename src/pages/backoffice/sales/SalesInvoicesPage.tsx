@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Plus, Eye, ChevronUp, ChevronDown, Filter, Search, FileText, Trash2, Mail, ScanLine, Bell, GitCompare } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Eye, ChevronUp, ChevronDown, Filter, Search, FileText, Trash2, Mail, ScanLine, Bell, GitCompare, DollarSign, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useCurrentBusinessMember } from '../../../hooks/useCurrentBusinessMember';
 import { useSalesInvoices, useDeleteSalesInvoice } from '@/hooks/useSalesInvoices';
 import { SALES_INVOICE_STATUS_COLORS, SALES_INVOICE_STATUS_LABELS, SalesInvoiceType } from '@/types/sales-invoice';
 import SalesInvoiceModal from '@/components/sales/SalesInvoiceModal';
@@ -8,12 +9,13 @@ import SalesInvoiceDetailModal from '@/components/sales/SalesInvoiceDetailModal'
 import SendInvoiceEmailModal from '@/components/sales/SendInvoiceEmailModal';
 import SalesOcrInvoiceModal from '@/components/sales/SalesOcrInvoiceModal';
 import SalesMatchingModal from '@/components/sales/SalesMatchingModal';
+import { useAIAccess } from '@/hooks/useAIAccess';
 
 const INVOICE_TYPE_LABELS: Record<SalesInvoiceType, string> = {
-  [SalesInvoiceType.NORMAL]: 'Normale',
-  [SalesInvoiceType.AVOIR]: 'Avoir',
-  [SalesInvoiceType.PROFORMA]: 'Proforma',
-  [SalesInvoiceType.ACOMPTE]: 'Acompte',
+  [SalesInvoiceType.NORMAL]: 'Standard',
+  [SalesInvoiceType.AVOIR]: 'Remboursement',
+  [SalesInvoiceType.PROFORMA]: 'Provisoire',
+  [SalesInvoiceType.ACOMPTE]: 'Avance',
 };
 
 const INVOICE_TYPE_COLORS: Record<SalesInvoiceType, string> = {
@@ -28,17 +30,31 @@ type SortDir = 'asc' | 'desc';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tous les statuts' },
-  { value: 'DRAFT', label: 'Brouillon' },
+  { value: 'DRAFT', label: 'En préparation' },
   { value: 'SENT', label: 'Envoyée' },
-  { value: 'PARTIALLY_PAID', label: 'Partiellement payée' },
+  { value: 'PARTIALLY_PAID', label: 'Payée en partie' },
   { value: 'PAID', label: 'Payée' },
   { value: 'OVERDUE', label: 'En retard' },
   { value: 'CANCELLED', label: 'Annulée' },
 ];
 
+const LIMIT = 20;
+
 export default function SalesInvoicesPage() {
   const { user } = useAuth();
   const businessId = (user as any)?.business_id ?? '';
+  const { businessMember: currentMember } = useCurrentBusinessMember();
+  const { hasAIAccess, loading: aiLoading } = useAIAccess();
+
+  // Permission checks
+  const currentUserRole = (user as any)?.role;
+  const isOwner = currentUserRole === 'BUSINESS_OWNER';
+  const sales = currentMember?.sales_permissions;
+
+  const canCreateInvoice = isOwner || sales?.create_invoice === true;
+  const canUpdateInvoice = isOwner || sales?.update_invoice === true;
+  const canDeleteInvoice = isOwner || sales?.delete_invoice === true;
+  const canSendInvoice = isOwner || sales?.send_invoice === true;
 
   const [statusFilter, setStatusFilter] = useState('');
   const [clientFilter, setClientFilter] = useState('');
@@ -60,20 +76,47 @@ export default function SalesInvoicesPage() {
     status: statusFilter || undefined,
     client_id: clientFilter || undefined,
     page,
-    limit: 20,
+    limit: LIMIT,
   });
 
   const deleteInvoice = useDeleteSalesInvoice(businessId);
+
+  const totalPages = data?.total_pages ?? 1;
+  const total = data?.total ?? 0;
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const invoices = data?.data || [];
+    return {
+      total: total,
+      draft: invoices.filter(i => i.status === 'DRAFT').length,
+      paid: invoices.filter(i => i.status === 'PAID').length,
+      overdue: invoices.filter(i => i.status === 'OVERDUE').length,
+      totalAmount: invoices.reduce((sum, i) => sum + Number(i.net_amount || 0), 0),
+    };
+  }, [data, total]);
+
+  // Calcul des numéros de pages à afficher
+  const getPageNumbers = () => {
+    if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (page <= 3) return [1, 2, 3, 4, 5];
+    if (page >= totalPages - 2) return [totalPages-4, totalPages-3, totalPages-2, totalPages-1, totalPages];
+    return [page-2, page-1, page, page+1, page+2];
+  };
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
   };
 
-  const SortIcon = ({ field }: { field: SortField }) =>
-    sortField === field
-      ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3 inline ml-1" /> : <ChevronDown className="h-3 w-3 inline ml-1" />)
-      : <span className="h-3 w-3 inline ml-1 opacity-30">↕</span>;
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField === field) {
+      return sortDir === 'asc' 
+        ? <ChevronUp className="h-3 w-3 inline ml-1" /> 
+        : <ChevronDown className="h-3 w-3 inline ml-1" />;
+    }
+    return <span className="h-3 w-3 inline ml-1 opacity-30">↕</span>;
+  };
 
   // Filter and search
   const filtered = (data?.data ?? []).filter(invoice => {
@@ -107,39 +150,95 @@ export default function SalesInvoicesPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Factures clients</h1>
         <div className="flex gap-3">
-          <button
-            onClick={() => setShowOcrModal(true)}
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 transition-colors"
-          >
-            <ScanLine className="h-5 w-5" />
-            Scanner une facture
-          </button>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-5 w-5" />
-            Nouvelle facture
-          </button>
+          {/* AI Feature - Only for Premium users */}
+          {!aiLoading && hasAIAccess && canCreateInvoice && (
+            <button
+              onClick={() => setShowOcrModal(true)}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 transition-colors"
+            >
+              <ScanLine className="h-5 w-5" />
+              Importer une facture
+            </button>
+          )}
+          {canCreateInvoice && (
+            <button
+              onClick={() => setModalOpen(true)}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+            >
+              <Plus className="h-5 w-5" />
+              Nouvelle facture
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Rapprochement Notice */}
-      <div className="mb-4 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg p-4">
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-blue-50 rounded-lg border border-blue-100 p-5 hover:shadow-sm transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-700 text-sm font-medium">Total Factures</p>
+              <p className="text-3xl font-bold text-blue-900 mt-2">{stats.total}</p>
+            </div>
+            <div className="bg-blue-100 p-3 rounded-lg">
+              <FileText className="h-7 w-7 text-blue-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-green-50 rounded-lg border border-green-100 p-5 hover:shadow-sm transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-700 text-sm font-medium">Payées</p>
+              <p className="text-3xl font-bold text-green-900 mt-2">{stats.paid}</p>
+            </div>
+            <div className="bg-green-100 p-3 rounded-lg">
+              <CheckCircle className="h-7 w-7 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-red-50 rounded-lg border border-red-100 p-5 hover:shadow-sm transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-700 text-sm font-medium">En Retard</p>
+              <p className="text-3xl font-bold text-red-900 mt-2">{stats.overdue}</p>
+            </div>
+            <div className="bg-red-100 p-3 rounded-lg">
+              <AlertCircle className="h-7 w-7 text-red-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-purple-50 rounded-lg border border-purple-100 p-5 hover:shadow-sm transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-purple-700 text-sm font-medium">Montant Total</p>
+              <p className="text-2xl font-bold text-purple-900 mt-2">{formatAmount(stats.totalAmount)} DT</p>
+            </div>
+            <div className="bg-purple-100 p-3 rounded-lg">
+              <DollarSign className="h-7 w-7 text-purple-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Vérification automatique Notice */}
+      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0 mt-0.5">
             <GitCompare className="h-5 w-5 text-indigo-600" />
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-indigo-900 mb-1">
-              Rapprochement automatique disponible
+              Vérification automatique disponible
             </h3>
             <p className="text-xs text-indigo-700 leading-relaxed">
-              Les factures liées à une commande client (badge <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">CMD</span>) peuvent être rapprochées automatiquement avec les bons de livraison pour valider les montants.
+              Les factures liées à une commande client (badge <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">CMD</span>) peuvent être vérifiées automatiquement avec les bons de livraison pour valider les montants.
             </p>
           </div>
         </div>
@@ -287,22 +386,24 @@ export default function SalesInvoicesPage() {
                           <button
                             onClick={() => setMatchingInvoice(invoice)}
                             className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                            title="Rapprochement automatique"
+                            title="Vérifier automatiquement"
                           >
                             <GitCompare className="h-4 w-4" />
                           </button>
                         )}
-                        <button
-                          onClick={() => {
-                            setInvoiceForEmail(invoice);
-                            setShowEmailModal(true);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                          title="Envoyer par email"
-                        >
-                          <Mail className="h-4 w-4" />
-                        </button>
-                        {(invoice.status === 'OVERDUE' || invoice.status === 'SENT') && (
+                        {canSendInvoice && (
+                          <button
+                            onClick={() => {
+                              setInvoiceForEmail(invoice);
+                              setShowEmailModal(true);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Envoyer par email"
+                          >
+                            <Mail className="h-4 w-4" />
+                          </button>
+                        )}
+                        {(invoice.status === 'OVERDUE' || invoice.status === 'SENT') && canSendInvoice && (
                           <button
                             onClick={() => {
                               setInvoiceForEmail(invoice);
@@ -321,14 +422,16 @@ export default function SalesInvoicesPage() {
                         >
                           <FileText className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => deleteInvoice.mutate(invoice.id)}
-                          disabled={deleteInvoice.isPending}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Supprimer"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {canDeleteInvoice && (
+                          <button
+                            onClick={() => deleteInvoice.mutate(invoice.id)}
+                            disabled={deleteInvoice.isPending}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -336,6 +439,42 @@ export default function SalesInvoicesPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination — toujours visible */}
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between flex-wrap gap-3">
+          <p className="text-sm text-gray-500">
+            {total === 0
+              ? 'Aucun résultat'
+              : `${(page - 1) * LIMIT + 1}–${Math.min(page * LIMIT, total)} sur ${total} facture${total > 1 ? 's' : ''}`
+            }
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(1)} disabled={page === 1}
+              className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs disabled:opacity-40 hover:bg-gray-50 transition-colors">
+              «
+            </button>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors">
+              Précédent
+            </button>
+            {getPageNumbers().map(n => (
+              <button key={n} onClick={() => setPage(n)}
+                className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                  page === n ? 'bg-indigo-600 text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}>
+                {n}
+              </button>
+            ))}
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors">
+              Suivant
+            </button>
+            <button onClick={() => setPage(totalPages)} disabled={page >= totalPages}
+              className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs disabled:opacity-40 hover:bg-gray-50 transition-colors">
+              »
+            </button>
+          </div>
         </div>
       </div>
 

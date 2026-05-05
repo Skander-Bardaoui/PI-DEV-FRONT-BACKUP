@@ -3,6 +3,7 @@ import {
   Building2,
   User,
   Building,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import ProfileSettings from './ProfileSettings';
@@ -10,11 +11,13 @@ import BusinessManagement from './BusinessManagement';
 import BusinessView from './BusinessView';
 import TenantSettings from './TenantSettings';
 import TenantView from './TenantView';
+import SubscriptionView from './SubscriptionView';
 
 const tabs = [
   { id: 'profile', label: 'Mon Profil', icon: User },
   { id: 'business', label: 'Mes Entreprises', icon: Building2 },
   { id: 'tenant', label: 'Mon Organisation', icon: Building },
+  { id: 'subscription', label: 'Mon Abonnement', icon: CreditCard, ownerOnly: true },
 ];
 
 export default function Settings() {
@@ -23,6 +26,9 @@ export default function Settings() {
 
   // Check if user is BUSINESS_OWNER
   const isBusinessOwner = user?.role === 'BUSINESS_OWNER';
+
+  // Filter tabs based on user role
+  const visibleTabs = tabs.filter(tab => !tab.ownerOnly || isBusinessOwner);
 
   return (
     <div className="space-y-6">
@@ -37,7 +43,7 @@ export default function Settings() {
         <div className="lg:w-64 flex-shrink-0">
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <nav className="p-2">
-              {tabs.map((tab) => (
+              {visibleTabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
@@ -64,6 +70,7 @@ export default function Settings() {
           {activeTab === 'tenant' && (
             isBusinessOwner ? <TenantSettings /> : <TenantView />
           )}
+          {activeTab === 'subscription' && isBusinessOwner && <SubscriptionView />}
         </div>
       </div>
     </div>

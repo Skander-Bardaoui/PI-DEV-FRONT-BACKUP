@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   X, Package, FileText, Plus, ChevronDown, ChevronUp,
-  AlertCircle, Send, Check, Loader2, ExternalLink,
+  AlertCircle, Send, Check, Loader2, Edit, XCircle,
 } from 'lucide-react';
 import { useGoodsReceiptsByPO }  from '@/hooks/useGoodsReceipts';
 import {
@@ -17,7 +17,7 @@ import EditSupplierPOModal           from '@/components/purchases/EditSupplierPO
 import GoodsReceiptModal             from '@/components/purchases/GoodsReceiptModal';
 import CreateInvoiceFromPOModal      from '@/components/purchases/CreateInvoiceFromPOModal';
 import InvoiceDetailModal            from '@/components/purchases/Invoicedetailmodal ';
-import PDFButton                     from '@/components/purchases/PDFButton';
+import { ActionButton, ActionSection } from '@/components/ui/ActionButton';
 import {
   formatAmount, formatDate,
   PO_STATUS_COLORS, PO_STATUS_LABELS,
@@ -39,6 +39,9 @@ export default function SupplierPODetailModal({ po: initialPO, businessId, onClo
   const [showReceipts,setShowReceipts]= useState(true);
   const [showInvoices,setShowInvoices]= useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<PurchaseInvoice | null>(null);
+
+  // Garde une ref snapshot du PO au moment où l'edit s'ouvre
+  const editPORef = useRef<SupplierPO | null>(null);
 
   const toast = useToast();
 
@@ -65,7 +68,6 @@ export default function SupplierPODetailModal({ po: initialPO, businessId, onClo
   const hasReceipts = receipts && receipts.length > 0;
   const hasInvoices = existingInvoices && existingInvoices.length > 0;
   const isFullyReceived = po.status === POStatus.FULLY_RECEIVED;
-  const isPartiallyReceived = po.status === POStatus.PARTIALLY_RECEIVED;
   const isConfirmedNoReceipt = po.status === POStatus.CONFIRMED;
   
   // 1. Montant total du BC
@@ -88,7 +90,8 @@ export default function SupplierPODetailModal({ po: initialPO, businessId, onClo
   }, 0) || 0;
   
   // Total réceptionné SANS timbre (le timbre est ajouté à chaque facture, pas à chaque réception)
-  const totalReceived = round3(totalReceivedHT + totalReceivedTax);
+  // const totalReceived = round3(totalReceivedHT + totalReceivedTax); // Unused but kept for reference
+  
   // 3. Montant total facturé
   const totalInvoiced = existingInvoices?.reduce((sum, inv) => sum + Number(inv.net_amount), 0) || 0;
   
@@ -155,6 +158,11 @@ export default function SupplierPODetailModal({ po: initialPO, businessId, onClo
     } catch (err: any) {
       toast.error('Erreur', err?.response?.data?.message ?? 'Impossible d\'annuler ce BC');
     }
+  };
+
+  const handleOpenEdit = () => {
+    editPORef.current = po; // snapshot figé au moment du clic
+    setEditOpen(true);
   };
 
   return (
@@ -431,102 +439,125 @@ export default function SupplierPODetailModal({ po: initialPO, businessId, onClo
           )}
 
           {/* Footer — boutons d'action */}
-          <div className="p-6 border-t border-gray-200">
-            <div className="flex flex-wrap gap-2">
-              <PDFButton variant="ghost" label="PDF BC" loading={pdfLoading} onClick={() => exportBC(po)} />
+          <div className="p-6 border-t border-gray-200 bg-gray-50">
+            <div className="space-y-4">
+              
+              {/* Section: Documents */}
+              <ActionSection title="Documents">
+                <ActionButton
+                  icon={FileText}
+                  label="Télécharger PDF"
+                  description="Générer le bon de commande"
+                  onClick={() => exportBC(po)}
+                  variant="danger"
+                  loading={pdfLoading}
+                />
+              </ActionSection>
 
-              {canEdit && (
-                <button onClick={() => setEditOpen(true)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors">
-                  Modifier
-                </button>
+              {/* Section: Workflow */}
+              {(canEdit || canSend || canConfirm || canReceive || shouldShowInvoiceButton) && (
+                <ActionSection title="Gestion du bon de commande">
+                  {canEdit && (
+                    <ActionButton
+                      icon={Edit}
+                      label="Modifier"
+                      description="Éditer les détails"
+                      onClick={handleOpenEdit}
+                      variant="secondary"
+                    />
+                  )}
+                  
+                  {canSend && (
+                    <ActionButton
+                      icon={Send}
+                      label="Envoyer au fournisseur"
+                      description="Transmettre par email"
+                      onClick={handleSend}
+                      variant="primary"
+                      loading={send.isPending}
+                    />
+                  )}
+                  
+                  {canConfirm && (
+                    <ActionButton
+                      icon={Check}
+                      label="Confirmer"
+                      description="Valider la commande"
+                      onClick={handleConfirm}
+                      variant="success"
+                      loading={confirm.isPending}
+                    />
+                  )}
+                  
+                  {canReceive && (
+                    <ActionButton
+                      icon={Plus}
+                      label="Bon de réception"
+                      description="Enregistrer une réception"
+                      onClick={() => setGrOpen(true)}
+                      variant="indigo"
+                    />
+                  )}
+                  
+                  {shouldShowInvoiceButton && (
+                    <ActionButton
+                      icon={FileText}
+                      label={hasInvoices ? 'Facture supplémentaire' : 'Créer facture'}
+                      description={`Montant: ${formatAmount(receivedNotInvoiced)}`}
+                      onClick={() => setInvoiceOpen(true)}
+                      variant="orange"
+                    />
+                  )}
+                </ActionSection>
               )}
 
-              {canSend && (
-                <button
-                  onClick={handleSend}
-                  disabled={send.isPending}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5 transition-colors"
-                >
-                  {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Envoyer au fournisseur
-                </button>
-              )}
-
-              {/* FIX : handleConfirm ferme le modal */}
-              {canConfirm && (
-                <button
-                  onClick={handleConfirm}
-                  disabled={confirm.isPending}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-1.5 transition-colors"
-                >
-                  {confirm.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  Confirmer
-                </button>
-              )}
-
-              {canReceive && (
-                <button onClick={() => setGrOpen(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 flex items-center gap-1 transition-colors">
-                  <Plus className="h-4 w-4" /> Bon de réception
-                </button>
-              )}
-
-              {/* LOGIQUE SIMPLIFIÉE : Bouton "Créer facture" */}
-              {shouldShowInvoiceButton ? (
-                <button onClick={() => setInvoiceOpen(true)}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm hover:bg-orange-600 flex items-center gap-1 transition-colors">
-                  <FileText className="h-4 w-4" /> 
-                  {hasInvoices 
-                    ? `Créer facture supplémentaire` 
-                    : 'Créer facture'}
-                </button>
-              ) : isFullyInvoiced ? (
-                <div
-                  title="Le montant total du BC a été entièrement facturé"
-                  className="flex items-center gap-2 px-4 py-2 border border-green-300 rounded-lg text-sm text-green-600 bg-green-50 cursor-not-allowed"
-                >
+              {/* Messages d'état */}
+              {isFullyInvoiced && !shouldShowInvoiceButton && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 flex items-center gap-2">
                   <Check className="h-4 w-4" />
                   BC entièrement facturé
                 </div>
-              ) : needsMoreReceipts ? (
-                <div
-                  title="Créez d'abord un bon de réception pour le reste de la commande"
-                  className="flex items-center gap-2 px-4 py-2 border border-amber-300 rounded-lg text-sm text-amber-600 bg-amber-50 cursor-not-allowed"
-                >
+              )}
+              
+              {needsMoreReceipts && !shouldShowInvoiceButton && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
-                  Réception supplémentaire requise
+                  Réception supplémentaire requise pour facturer le reste
                 </div>
-              ) : shouldBlockInvoice ? (
-                <div
-                  title="Créez d'abord un bon de réception avant de facturer"
-                  className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-400 bg-gray-50 cursor-not-allowed"
-                >
+              )}
+              
+              {shouldBlockInvoice && !shouldShowInvoiceButton && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-600 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
-                  Créer facture (réception requise)
+                  Créez d'abord un bon de réception avant de facturer
                 </div>
-              ) : null}
-
-              {canCancel && (
-                <button
-                  onClick={handleCancel}
-                  disabled={cancel.isPending}
-                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50 transition-colors"
-                >
-                  Annuler le BC
-                </button>
               )}
 
-              <button onClick={onClose}
-                className="ml-auto px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-                Fermer
-              </button>
+              {/* Section: Actions critiques */}
+              {canCancel && (
+                <ActionSection title="Actions critiques" variant="danger">
+                  <ActionButton
+                    icon={XCircle}
+                    label="Annuler le BC"
+                    description="Annuler la commande"
+                    onClick={handleCancel}
+                    variant="danger"
+                    loading={cancel.isPending}
+                  />
+                </ActionSection>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {editOpen    && <EditSupplierPOModal po={po} businessId={businessId} onClose={() => setEditOpen(false)} />}
+      {editOpen && editPORef.current && (
+        <EditSupplierPOModal 
+          po={editPORef.current}  // ← PO figé, ne change plus
+          businessId={businessId} 
+          onClose={() => setEditOpen(false)} 
+        />
+      )}
       {grOpen      && <GoodsReceiptModal  po={po} businessId={businessId} onClose={() => setGrOpen(false)} />}
       {invoiceOpen && <CreateInvoiceFromPOModal po={po} businessId={businessId} onClose={() => setInvoiceOpen(false)} />}
       {selectedInvoice && (

@@ -412,7 +412,6 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
   const [error, setError]     = useState('');
 
   const [form, setForm] = useState({
-    invoice_number_supplier: '',
     invoice_date: '',
     supplier_id: '',
     subtotal_ht: '',
@@ -423,7 +422,6 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
   });
 
   const [conf, setConf] = useState<Record<string, ConfidenceLevel>>({
-    invoice_number_supplier: 'not_found',
     invoice_date: 'not_found',
     supplier_name: 'not_found',
     subtotal_ht: 'not_found',
@@ -433,10 +431,20 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
   });
 
   const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierNotFound, setSupplierNotFound] = useState(false);
 
   const ocr    = useOcrExtract(businessId);
   const create = useCreatePurchaseInvoice(businessId);
-  const { data: suppliersData } = useSuppliers(businessId, { is_active: true, limit: 100, search: supplierSearch || undefined });
+
+  // Charger tous les fournisseurs actifs (sans filtre de recherche)
+  const { data: allSuppliersData } = useSuppliers(businessId, { is_active: true, limit: 200 });
+  // Charger les fournisseurs filtrés par recherche (quand l'utilisateur tape)
+  const { data: filteredSuppliersData } = useSuppliers(businessId, { is_active: true, limit: 100, search: supplierSearch || undefined });
+
+  // Liste affichée : si recherche active → filtrée, sinon tous
+  const displayedSuppliers = supplierSearch
+    ? (filteredSuppliersData?.data ?? [])
+    : (allSuppliersData?.data ?? []);
 
   const handleFile = async (file: File) => {
     setError('');
@@ -444,7 +452,6 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
       const result = await ocr.mutateAsync(file);
       setOcrData(result);
       setForm({
-        invoice_number_supplier: result.invoice_number_supplier.value ?? '',
         invoice_date:            result.invoice_date.value ?? '',
         supplier_id:             '',
         subtotal_ht:             result.subtotal_ht.value?.toString() ?? '',
@@ -454,7 +461,6 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
         receipt_url:             result.file_url,
       });
       setConf({
-        invoice_number_supplier: result.invoice_number_supplier.confidence,
         invoice_date:            result.invoice_date.confidence,
         supplier_name:           result.supplier_name.confidence,
         subtotal_ht:             result.subtotal_ht.confidence,
@@ -462,7 +468,30 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
         timbre_fiscal:           result.timbre_fiscal.confidence,
         net_amount:              result.net_amount.confidence,
       });
-      if (result.supplier_name.value) setSupplierSearch(result.supplier_name.value);
+      if (result.supplier_name.value) {
+        const detectedName = result.supplier_name.value.toLowerCase();
+        const allSuppliers = allSuppliersData?.data ?? [];
+
+        // Chercher une correspondance exacte ou partielle dans les fournisseurs existants
+        const matched = allSuppliers.find(s =>
+          s.name.toLowerCase().includes(detectedName) ||
+          detectedName.includes(s.name.toLowerCase())
+        );
+
+        if (matched) {
+          // Fournisseur trouvé → auto-sélectionner
+          setForm(f => ({ ...f, supplier_id: matched.id }));
+          setSupplierSearch(matched.name);
+          setSupplierNotFound(false);
+        } else {
+          // Fournisseur non trouvé → afficher tous les fournisseurs, vider la recherche
+          setSupplierSearch('');
+          setSupplierNotFound(true);
+        }
+      } else {
+        setSupplierSearch('');
+        setSupplierNotFound(false);
+      }
       setStep('review');
     } catch (err: any) {
       setError(err?.response?.data?.message ?? err?.message ?? 'Erreur OCR');
@@ -470,14 +499,13 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
   };
 
   const handleCreate = async () => {
-    if (!form.invoice_number_supplier || !form.invoice_date || !form.supplier_id) {
-      setError('Veuillez remplir : N° facture, date et fournisseur.');
+    if (!form.invoice_date || !form.supplier_id) {
+      setError('Veuillez remplir : date et fournisseur.');
       return;
     }
     setError('');
     try {
       await create.mutateAsync({
-        invoice_number_supplier: form.invoice_number_supplier,
         invoice_date:   form.invoice_date,
         supplier_id:    form.supplier_id,
         subtotal_ht:    parseFloat(form.subtotal_ht)    || 0,
@@ -513,9 +541,9 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
               <Sparkles size={22} color="#fff" />
             </div>
             <div style={{ flex: 1 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#fff' }}>Import intelligent par IA</h2>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#fff' }}>Scanner une Facture</h2>
               <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
-                OCR + Gemini AI · Extraction automatique des données
+                Importez votre facture et laissez l'IA extraire les données automatiquement
               </p>
             </div>
             <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer', color: '#fff', borderRadius: 8, padding: 6, display: 'flex', alignItems: 'center' }}>
@@ -592,12 +620,31 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
                   <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <FileText size={12} /> Identification
                   </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <OcrField label="N° Facture fournisseur" value={form.invoice_number_supplier}
-                      confidence={conf.invoice_number_supplier} onChange={upd('invoice_number_supplier')} required />
-                    <OcrField label="Date de facture" value={form.invoice_date}
-                      confidence={conf.invoice_date} onChange={upd('invoice_date')} type="date" required />
+                  
+                  {/* Info message about auto-generated invoice number */}
+                  <div style={{ 
+                    padding: '10px 12px', 
+                    background: 'linear-gradient(135deg, #EEF2FF, #E0E7FF)', 
+                    border: '1px solid #C7D2FE', 
+                    borderRadius: 8, 
+                    marginBottom: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}>
+                    <CheckCircle size={14} color="#4F46E5" />
+                    <div>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#4338CA' }}>
+                        Numéro de facture auto-généré
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6366F1' }}>
+                        Un numéro unique sera créé automatiquement (ex: FACT-2026-0001)
+                      </p>
+                    </div>
                   </div>
+
+                  <OcrField label="Date de facture" value={form.invoice_date}
+                    confidence={conf.invoice_date} onChange={upd('invoice_date')} type="date" required />
                 </div>
 
                 {/* Section : Fournisseur */}
@@ -616,19 +663,68 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
                       <ConfIcon level={conf.supplier_name} />
                       {ocrData.supplier_name.value ? `IA a détecté : "${ocrData.supplier_name.value}"` : 'Fournisseur non détecté'}
                     </div>
+                    {/* Badge si fournisseur non trouvé dans la base */}
+                    {supplierNotFound && ocrData.supplier_name.value && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        padding: '3px 8px', borderRadius: 20, fontSize: 11,
+                        background: '#FEF3C7', border: '1px solid #FCD34D', color: '#92400E',
+                      }}>
+                        ⚠️ Non trouvé — choisissez dans la liste
+                      </div>
+                    )}
                   </div>
-                  <input type="text" placeholder="🔍 Rechercher un fournisseur..." value={supplierSearch}
-                    onChange={e => setSupplierSearch(e.target.value)}
-                    style={{ width: '100%', padding: '9px 12px', fontSize: 13, border: '1.5px solid #E5E7EB', borderRadius: '8px 8px 0 0', outline: 'none', boxSizing: 'border-box', background: '#fff' }} />
-                  <select value={form.supplier_id}
-                    onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))}
-                    size={3}
-                    style={{ width: '100%', padding: '6px 10px', fontSize: 13, border: '1.5px solid #E5E7EB', borderTop: 'none', borderRadius: '0 0 8px 8px', outline: 'none', boxSizing: 'border-box', background: '#fff' }}>
+
+                  {/* Message d'aide si fournisseur non trouvé */}
+                  {supplierNotFound && (
+                    <div style={{
+                      padding: '8px 12px', marginBottom: 8,
+                      background: '#FFFBEB', border: '1px solid #FCD34D',
+                      borderRadius: 8, fontSize: 12, color: '#92400E',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}>
+                      <span>⚠️</span>
+                      <span>
+                        Le fournisseur <strong>"{ocrData.supplier_name.value}"</strong> n'existe pas dans votre base.
+                        Sélectionnez un fournisseur existant ci-dessous.
+                      </span>
+                    </div>
+                  )}
+
+                  <input
+                    type="text"
+                    placeholder="🔍 Rechercher un fournisseur..."
+                    value={supplierSearch}
+                    onChange={e => {
+                      setSupplierSearch(e.target.value);
+                      setSupplierNotFound(false);
+                      // Réinitialiser la sélection si l'utilisateur tape
+                      if (form.supplier_id) setForm(f => ({ ...f, supplier_id: '' }));
+                    }}
+                    style={{ width: '100%', padding: '9px 12px', fontSize: 13, border: '1.5px solid #E5E7EB', borderRadius: '8px 8px 0 0', outline: 'none', boxSizing: 'border-box', background: '#fff' }}
+                  />
+                  <select
+                    value={form.supplier_id}
+                    onChange={e => {
+                      setForm(f => ({ ...f, supplier_id: e.target.value }));
+                      setSupplierNotFound(false);
+                      // Mettre à jour la recherche avec le nom sélectionné
+                      const selected = displayedSuppliers.find(s => s.id === e.target.value);
+                      if (selected) setSupplierSearch(selected.name);
+                    }}
+                    size={Math.min(5, Math.max(3, displayedSuppliers.length + 1))}
+                    style={{ width: '100%', padding: '6px 10px', fontSize: 13, border: '1.5px solid #E5E7EB', borderTop: 'none', borderRadius: '0 0 8px 8px', outline: 'none', boxSizing: 'border-box', background: '#fff' }}
+                  >
                     <option value="">— Sélectionner un fournisseur —</option>
-                    {(suppliersData?.data ?? []).map(s => (
+                    {displayedSuppliers.map(s => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
+                  {/* Compteur de fournisseurs */}
+                  <p style={{ margin: '4px 0 0', fontSize: 11, color: '#9CA3AF', textAlign: 'right' }}>
+                    {displayedSuppliers.length} fournisseur{displayedSuppliers.length !== 1 ? 's' : ''} disponible{displayedSuppliers.length !== 1 ? 's' : ''}
+                    {supplierSearch && ` pour "${supplierSearch}"`}
+                  </p>
                 </div>
 
                 {/* Section : Montants */}
@@ -709,13 +805,13 @@ export default function OcrInvoiceModal({ businessId, onClose, onCreated }: Prop
               </div>
               <h3 style={{ fontWeight: 700, fontSize: 20, marginBottom: 8, color: '#1F2937' }}>Facture créée !</h3>
               <p style={{ color: '#6B7280', fontSize: 14, marginBottom: 8 }}>
-                La facture <strong style={{ color: '#1F2937' }}>{form.invoice_number_supplier}</strong> a été créée
+                La facture a été créée avec succès avec un <strong style={{ color: '#4F46E5' }}>numéro auto-généré</strong>
               </p>
               <p style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 28 }}>
                 Extraite automatiquement par IA en {ocrData?.processing_time_ms}ms
               </p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                <button onClick={() => { setStep('upload'); setOcrData(null); setForm({ invoice_number_supplier: '', invoice_date: '', supplier_id: '', subtotal_ht: '', tax_amount: '', timbre_fiscal: '1.000', net_amount: '', receipt_url: '' }); }}
+                <button onClick={() => { setStep('upload'); setOcrData(null); setForm({ invoice_date: '', supplier_id: '', subtotal_ht: '', tax_amount: '', timbre_fiscal: '1.000', net_amount: '', receipt_url: '' }); }}
                   style={{ padding: '11px 20px', border: '1.5px solid #E5E7EB', borderRadius: 12, cursor: 'pointer', background: '#fff', fontSize: 13, fontWeight: 500, color: '#374151' }}>
                   Importer une autre
                 </button>
